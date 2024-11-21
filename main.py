@@ -103,7 +103,7 @@ async def check_birthdays():
                             await channel.send(
                                 f"🎉 Happy Birthday, {member.mention}! 🎂"
                             )
-                            print(f"Sent birthday message for: {member.display_name}")
+                            print(f"Sent birthday message for: {member.name}")
                 elif role in member.roles:
                     # Remove the birthday role if the user's birthday is over
                     await member.remove_roles(role)
@@ -321,6 +321,45 @@ async def update_birthdays():
 
     current_time = datetime.now().strftime("%H:%M")
     print(f"{current_time} - Updated birthdays from data channel.")
+
+
+#####################################################################################################
+# Slash Command to List Birthdays (Admins only)
+@tree.command(
+    name="list-birthdays", description="List all birthdays in the server (Admins only)."
+)
+async def list_birthdays(interaction: discord.Interaction):
+    # Check if the user has administrator permissions
+    if not interaction.user.guild_permissions.administrator:
+        await interaction.response.send_message(
+            "You need to be an administrator to use this command.", ephemeral=True
+        )
+        return
+
+    guild_id = str(interaction.guild.id)
+
+    # Filter birthdays for the current guild
+    guild_birthdays = [
+        {"member_id": user_id, "date": data["date"]}
+        for user_id, data in birthdays.items()
+        if data["guild_id"] == guild_id
+    ]
+
+    if not guild_birthdays:
+        await interaction.response.send_message(
+            "No birthdays found for this server.", ephemeral=True
+        )
+        return
+
+    # Format the list of birthdays
+    response = "**🎂 Birthdays in this server:**\n"
+    for entry in guild_birthdays:
+        member = interaction.guild.get_member(int(entry["member_id"]))
+        member_name = member.name if member else "Unknown Member"
+        response += f"- {member_name}: {entry['date']}\n"
+
+    # Send the response
+    await interaction.response.send_message(response)
 
 
 #####################################################################################################
