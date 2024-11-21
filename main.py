@@ -367,7 +367,7 @@ async def list_birthdays(interaction: discord.Interaction):
 @client.event
 async def on_ready():
     await tree.sync()  # Sync commands to Discord
-    activity = discord.Game(name="Celebrating Birthdays 🎂")
+    activity = discord.Game(name="Cooking Aki 🤣")
     await client.change_presence(status=discord.Status.online, activity=activity)
     print(f"Logged in as {client.user}")
     update_birthdays.start()
