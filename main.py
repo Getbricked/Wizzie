@@ -50,20 +50,23 @@ async def check_birthdays():
         # Next update time
         update_time = datetime.combine(
             now.date() + timedelta(days=1), datetime.min.time()
-        ) + timedelta(minutes=15)
+        )
 
         # Get time from now till next update
-        time_until_midnight = update_time - now
+        time_until_update = update_time - now
 
         # Get hours and remaining seconds
-        hours, remainder = divmod(time_until_midnight.seconds, 3600)
+        hours, remainder = divmod(time_until_update.seconds, 3600)
         minutes, _ = divmod(remainder, 60)  # Get minutes from the remaining seconds
 
         # Print the time until the next update
-        print(f"Next birthday update in {hours} hours and {minutes} minutes.")
+        current_time = datetime.now().strftime("%H:%M")
+        print(
+            f"{current_time} - Next birthday update in {hours} hours and {minutes} minutes."
+        )
 
         # Wait until midnight
-        await asyncio.sleep(time_until_midnight.seconds)
+        await asyncio.sleep(time_until_update.seconds)
 
         # Execute birthday logic at midnight
         today = datetime.now().strftime("%d-%m")
@@ -100,6 +103,7 @@ async def check_birthdays():
                             await channel.send(
                                 f"🎉 Happy Birthday, {member.mention}! 🎂"
                             )
+                            print(f"Sent birthday message for: {member.display_name}")
                 elif role in member.roles:
                     # Remove the birthday role if the user's birthday is over
                     await member.remove_roles(role)
