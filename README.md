@@ -13,13 +13,13 @@ Wizzie is a Discord bot designed to help you manage and celebrate birthdays with
 ### Setup (keep in mind that all birthday in data_channel must have formate dd-mm)
 
 ```
-/setup birthday_role:<role> announcement_channel:<channel> data_channel:<channel>
+/setup birthday_role: announcement_channel: data_channel:
 ```
 
 ### Add a user's birthday (must have format dd-mm)
 
 ```
-/add-birthday user:<user> date:dd-mm
+/add-birthday user: date:
 ```
 
 ### List all birthdays in the server
@@ -31,5 +31,5 @@ Wizzie is a Discord bot designed to help you manage and celebrate birthdays with
 ### Test birthday
 
 ```
-/test-birthday user:<user>
+/test-birthday user:
 ```
