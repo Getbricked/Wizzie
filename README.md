@@ -10,7 +10,7 @@ Wizzie is a Discord bot designed to help you manage and celebrate birthdays with
 
 ## Command (admin only)
 
-### Setup
+### Setup (keep in mind that all birthday in data_channel must have formate dd-mm)
 
 ```
 /setup birthday_role:<role> announcement_channel:<channel> data_channel:<channel>
