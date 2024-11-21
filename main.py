@@ -47,13 +47,16 @@ tree = app_commands.CommandTree(client)
 async def check_birthdays():
     while True:
         now = datetime.now()
-        midnight = datetime.combine(
+        # Next update time
+        update_time = datetime.combine(
             now.date() + timedelta(days=1), datetime.min.time()
-        )  # Next midnight
-        time_until_midnight = midnight - now
-        hours, remainder = divmod(
-            time_until_midnight.seconds, 3600
-        )  # Get hours and remaining seconds
+        ) + timedelta(minutes=15)
+
+        # Get time from now till next update
+        time_until_midnight = update_time - now
+
+        # Get hours and remaining seconds
+        hours, remainder = divmod(time_until_midnight.seconds, 3600)
         minutes, _ = divmod(remainder, 60)  # Get minutes from the remaining seconds
 
         # Print the time until the next update
@@ -311,7 +314,9 @@ async def update_birthdays():
     # After processing all messages, update the birthdays.json file
     with open("birthdays.json", "w") as f:
         json.dump(birthdays, f, indent=4)
-    print("Updated birthdays from the channel.")
+
+    current_time = datetime.now().strftime("%H:%M")
+    print(f"{current_time} - Updated birthdays from data channel.")
 
 
 #####################################################################################################
