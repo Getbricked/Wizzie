@@ -140,7 +140,7 @@ async def add_birthday(
         # If it doesn't exist, add the new entry
         birthdays[str(user.id)] = {"date": date, "guild_id": str(interaction.guild.id)}
         await interaction.response.send_message(
-            f"Added birthday for {user.display_name} on {date}!"
+            f"Added birthday for {user.name} on {date}!"
         )
 
     # Save the updated birthdays data to the file
@@ -265,45 +265,6 @@ async def test_birthday(interaction: discord.Interaction, user: discord.Member):
 
 #####################################################################################################
 # Get birthday data from data channel
-@client.event
-async def on_message(message):
-    if message.author.bot:
-        return  # Ignore bot messages
-
-    # Get the settings for the guild and birthday channel
-    guild_id = str(message.guild.id)
-    data_channel_name = settings.get(guild_id, {}).get("data_channel")
-
-    # If the message is not from the correct birthday channel, ignore it
-    if message.channel.name != data_channel_name:
-        return
-
-    # Parse the message to check if it's a valid birthday (dd-mm)
-    content = message.content.strip()
-    if not content:
-        return  # Ignore empty messages
-
-    try:
-        # Check if the message is in the correct date format (dd-mm)
-        date = datetime.strptime(content, "%d-%m").strftime("%d-%m")
-
-        # Add birthday data to the system (check if it already exists)
-        user_id = str(message.author.id)
-        birthdays[user_id] = {"date": date, "guild_id": guild_id}
-
-        # Save the updated birthdays data to the JSON file
-        with open(birthdays_file, "w") as f:
-            json.dump(birthdays, f, indent=4)
-
-        # Confirm that the birthday has been set
-        await message.channel.send(
-            f"Birthday for {message.author.display_name} has been set to {date}!"
-        )
-    except ValueError:
-        # If the date format is incorrect, send a message
-        await message.channel.send("Invalid date format. Please use `DD-MM`.")
-
-
 @tasks.loop(hours=1)  # This task will run every hour
 async def update_birthdays():
     # Load the current birthdays from the file (ensure it has the latest data)
@@ -318,15 +279,11 @@ async def update_birthdays():
             continue  # Skip if there's no data channel set for this guild
 
         # Fetch the data channel (where users post their birthdays)
-        data_channel = discord.utils.get(guild.text_channels, name="rules")
-
-        messages = []
-
-        messages = await data_channel.fetch_message(1308825899063312477)
-        # print(messages)
+        data_channel = discord.utils.get(guild.text_channels, name=data_channel_name)
 
         if not data_channel:
             continue  # Skip if the data channel is not found
+
         # Read the last 100 messages from the channel
         async for message in data_channel.history(limit=100):
             # Skip if the message was sent by a bot
@@ -336,6 +293,7 @@ async def update_birthdays():
             content = message.content.strip()
             if not content:
                 continue  # Skip empty messages
+
             try:
                 # Check if the message contains a valid birthday (dd-mm)
                 date = datetime.strptime(content, "%d-%m").strftime("%d-%m")
@@ -364,7 +322,7 @@ async def on_ready():
     activity = discord.Game(name="Celebrating Birthdays 🎂")
     await client.change_presence(status=discord.Status.online, activity=activity)
     print(f"Logged in as {client.user}")
-    # update_birthdays.start()
+    update_birthdays.start()
     client.loop.create_task(check_birthdays())  # Start the birthday checker
 
 
