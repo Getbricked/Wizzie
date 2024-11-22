@@ -33,3 +33,16 @@ Wizzie is a Discord bot designed to help you manage and celebrate birthdays with
 ```
 /test-birthday user:
 ```
+
+## Data structure
+
+```json
+{
+  "guild_id": {
+    "user_id": {
+      "bdate": "dd-mm",
+      "xp": 0
+    }
+  }
+}
+```

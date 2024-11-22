@@ -9,9 +9,14 @@ import asyncio
 from datetime import datetime, timedelta
 
 
-token_file = "token.json"
-if not os.path.exists(token_file):
-    with open(token_file, "w") as f:
+# Static parameters
+TOKEN_FILE = "token.json"
+DATA_FILE = "data.json"
+CURRENT_TIME = datetime.now().strftime("%H:%M")
+
+# Load Token
+if not os.path.exists(TOKEN_FILE):
+    with open(TOKEN_FILE, "w") as f:
         json.dump({}, f)
 with open("token.json", "r") as f:
     TOKEN = json.load(f)["token"]
@@ -19,14 +24,13 @@ with open("token.json", "r") as f:
 # Load environment variables
 load_dotenv()
 
-
 #####################################################################################################
 # Initialize or load birthday data
-birthdays_file = "birthdays.json"
-if not os.path.exists(birthdays_file):
-    with open(birthdays_file, "w") as f:
+
+if not os.path.exists(DATA_FILE):
+    with open(DATA_FILE, "w") as f:
         json.dump({}, f)
-with open(birthdays_file, "r") as f:
+with open(DATA_FILE, "r") as f:
     birthdays = json.load(f)
 
 # Initialize or load settings data
@@ -39,6 +43,32 @@ with open(settings_file, "r") as f:
 
 
 #####################################################################################################
+# Helper Functions
+def save_birthdays():
+    """Save the updated birthday data to the file."""
+    with open(DATA_FILE, "w") as f:
+        json.dump(birthdays, f, indent=4)
+
+
+def add_or_update_birthday(guild_id, user_id, bdate):
+    """Add or update a birthday for a user in the given guild."""
+    guild_id = str(guild_id)
+    user_id = str(user_id)
+
+    if guild_id not in birthdays:
+        birthdays[guild_id] = {}
+
+    birthdays[guild_id][user_id] = {"bdate": bdate}
+
+
+def get_updated_guild_birthdays(guild_id):
+    """Retrieve all birthdays for a specific guild."""
+    with open(DATA_FILE, "r") as f:
+        birthdays = json.load(f)
+    return birthdays.get(str(guild_id), {})
+
+
+#####################################################################################################
 # Set up the bot client
 intents = discord.Intents.default()
 intents.members = True  # Needed to access member details
@@ -48,70 +78,121 @@ tree = app_commands.CommandTree(client)
 
 
 #####################################################################################################
-# Modified task to run at midnight daily
+# Birthday Checker Task
 async def check_birthdays():
     while True:
         now = datetime.now()
-        # Next update time
-        update_time = datetime.combine(
-            now.date() + timedelta(days=1), datetime.min.time()
-        )
+        today = now.strftime("%d-%m")
 
-        # Get time from now till next update
-        time_until_update = update_time - now
-
-        # Get hours and remaining seconds
-        hours, remainder = divmod(time_until_update.seconds, 3600)
-        minutes, _ = divmod(remainder, 60)  # Get minutes from the remaining seconds
-
-        # Print the time until the next update
-        current_time = datetime.now().strftime("%H:%M")
-        print(
-            f"{current_time} - Next birthday update in {hours} hours and {minutes} minutes."
-        )
-
-        # Wait until midnight
-        await asyncio.sleep(time_until_update.seconds)
-
-        # Execute birthday logic at midnight
-        today = datetime.now().strftime("%d-%m")
-        guild_ids = {data["guild_id"] for data in birthdays.values()}
-
-        for guild_id in guild_ids:
+        for guild_id, users in birthdays.items():
             guild = client.get_guild(int(guild_id))
             if not guild:
-                continue  # Skip if the guild is not found
+                continue
 
-            # Get the birthday role for this guild
             role_name = settings.get(guild_id, {}).get("birthday_role", "Birthday")
             role = discord.utils.get(guild.roles, name=role_name)
             if not role:
-                continue  # Skip if the role doesn't exist
+                continue
 
-            # Process each member in the guild
-            for member in guild.members:
-                user_id = str(member.id)
-                user_birthday = birthdays.get(user_id, {}).get("date")
+            for user_id, data in users.items():
+                user = guild.get_member(int(user_id))
+                if not user:
+                    continue
 
-                if not user_birthday:
-                    continue  # Skip members without birthdays set
-
-                if user_birthday == today:
-                    # Assign the birthday role if the user doesn't already have it
-                    if role not in member.roles:
-                        await member.add_roles(role)
+                if data["bdate"] == today:
+                    if role not in user.roles:
+                        await user.add_roles(role)
                         channel_name = settings.get(guild_id, {}).get(
                             "birthday_channel", "general"
                         )
                         channel = discord.utils.get(guild.channels, name=channel_name)
                         if channel:
-                            await channel.send(
-                                f"🎉 Happy Birthday, {member.mention}! 🎂"
-                            )
-                            print(f"Sent birthday message for: {member.name}")
-                elif role in member.roles:
-                    # Remove the birthday role if the user's birthday is over
-                    await member.remove_roles(role)
+                            await channel.send(f"🎉 Happy Birthday, {user.mention}! 🎂")
+                elif role in user.roles:
+                    await user.remove_roles(role)
+
+        # Wait until the next day
+        next_day = now + timedelta(days=1)
+        next_update = datetime.combine(next_day, datetime.min.time())
+        hours = int(((next_update - now).seconds) / 3600)
+        minutes = int(((next_update - now).seconds) / 60) % 60
+        print(
+            f"{CURRENT_TIME} - Next birthday update in {hours} hours and {minutes} minutes."
+        )
+        await asyncio.sleep((next_update - now).seconds)
+
+
+#####################################################################################################
+# Get birthday data from data channel
+@tasks.loop(hours=1)  # This task will run every hour
+async def update_birthdays():
+    try:
+        # Load the current birthdays from the file (ensure it has the latest data)
+        with open(DATA_FILE, "r") as f:
+            birthdays = json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError):
+        print("Error reading birthdays file. Initializing empty data.")
+        birthdays = {}
+
+    # Iterate through all guilds
+    for guild in client.guilds:
+        guild_id = str(guild.id)
+        data_channel_name = settings.get(guild_id, {}).get("data_channel")
+
+        if not data_channel_name:
+            print(f"Guild {guild_id}: No data channel set.")
+            continue  # Skip if there's no data channel set for this guild
+
+        # Fetch the data channel (where users post their birthdays)
+        data_channel = discord.utils.get(guild.text_channels, name=data_channel_name)
+
+        if not data_channel:
+            print(f"Guild {guild_id}: Data channel '{data_channel_name}' not found.")
+            continue  # Skip if the data channel is not found
+
+        print(f"Guild {guild_id}: Reading messages from '{data_channel_name}'.")
+
+        # Initialize guild data if not present
+        if guild_id not in birthdays:
+            birthdays[guild_id] = {}
+
+        # Process messages in the data channel
+        async for message in data_channel.history(limit=100):
+            # Skip if the message was sent by a bot
+            if message.author.bot:
+                continue
+
+            content = message.content.strip()
+            if not content:
+                continue  # Skip empty messages
+
+            try:
+                # Validate if the content is a valid birthday (dd-mm format)
+                bdate = datetime.strptime(content, "%d-%m").strftime("%d-%m")
+                user_id = str(message.author.id)
+
+                # Update the birthdays data for the guild
+                if user_id not in birthdays[guild_id]:
+                    birthdays[guild_id][user_id] = {"bdate": bdate}
+                    print(
+                        f"Added birthday for user {message.author.name} in guild {guild.name}: {bdate}"
+                    )
+                else:
+                    print(
+                        f"Skipped duplicate birthday for {message.author.name} in guild {guild.name}."
+                    )
+
+            except ValueError:
+                # print(f"Invalid bdate format in message: {content}")
+                continue  # Skip invalid bdate formats
+
+    # Save the updated birthdays data to the file
+    try:
+        with open(DATA_FILE, "w") as f:
+            json.dump(birthdays, f, indent=4)
+        print(f"{datetime.now().strftime('%H:%M')} - Updated birthdays file.")
+    except IOError as e:
+        print(f"Error writing to birthdays file: {e}")
 
 
 #####################################################################################################
@@ -120,10 +201,10 @@ async def check_birthdays():
     name="add-birthday", description="Add a birthday for a user (Admins only)"
 )
 @app_commands.describe(
-    user="The user to add a birthday for", date="The user's birthday in DD-MM format"
+    user="The user to add a birthday for", bdate="The user's birthday in DD-MM format"
 )
 async def add_birthday(
-    interaction: discord.Interaction, user: discord.Member, date: str
+    interaction: discord.Interaction, user: discord.Member, bdate: str
 ):
     if not interaction.user.guild_permissions.administrator:
         await interaction.response.send_message(
@@ -132,32 +213,20 @@ async def add_birthday(
         return
 
     try:
-        datetime.strptime(date, "%d-%m")  # Validate date format
+        datetime.strptime(bdate, "%d-%m")  # Validate bdate format
     except ValueError:
         await interaction.response.send_message(
-            "Invalid date format. Use DD-MM.", ephemeral=True
+            "Invalid bdate format. Use DD-MM.", ephemeral=True
         )
         return
 
-    # Check if the user's birthday already exists in the data
-    user_birthday = birthdays.get(str(user.id))
+    guild_id = str(interaction.guild.id)
+    add_or_update_birthday(guild_id, user.id, bdate)
+    save_birthdays()
 
-    if user_birthday:
-        # If it exists, update the birthday
-        user_birthday["date"] = date
-        await interaction.response.send_message(
-            f"Updated birthday for {user.display_name} to {date}!"
-        )
-    else:
-        # If it doesn't exist, add the new entry
-        birthdays[str(user.id)] = {"date": date, "guild_id": str(interaction.guild.id)}
-        await interaction.response.send_message(
-            f"Added birthday for {user.name} on {date}!"
-        )
-
-    # Save the updated birthdays data to the file
-    with open(birthdays_file, "w") as f:
-        json.dump(birthdays, f, indent=4)
+    await interaction.response.send_message(
+        f"Added birthday for {user.name} on {bdate}!"
+    )
 
 
 #####################################################################################################
@@ -222,110 +291,49 @@ async def test_birthday(interaction: discord.Interaction, user: discord.Member):
         )
         return
 
-    # Check if the user has birthday data
-    user_data = birthdays.get(str(user.id))
-    # is_temporary_data = False
-    original_has_role = False  # To track if the user already has the birthday role
-
-    if not user_data:
-        # Create temporary user data for testing
-        user_data = {
-            "date": "test",  # Indicate this is temporary test data
-            "guild_id": str(guild.id),
-        }
-        # is_temporary_data = True
-
     # Get birthday role
     role_name = settings.get(str(guild.id), {}).get("birthday_role", "Birthday")
     role = discord.utils.get(guild.roles, name=role_name)
-    if role:
-        # Check if the user already has the role
-        original_has_role = role in user.roles
 
-        # Assign the role for testing
-        if not original_has_role:
-            await user.add_roles(role)
-        role_message = f"Assigned the role `{role.name}` to {user.display_name}."
-    else:
-        role_message = "No birthday role is set."
+    if not role:
+        await interaction.response.send_message(
+            "No birthday role is set. Please configure it using `/setup`.",
+            ephemeral=True,
+        )
+        return
 
-    # Get birthday announcement channel
-    channel_name = settings.get(str(guild.id), {}).get("birthday_channel", "general")
-    channel = discord.utils.get(guild.channels, name=channel_name)
-    if channel:
-        await channel.send(f"🎉 (Test) Happy Birthday, {user.mention}! 🎂")
-        channel_message = f"Sent a test birthday message in `{channel.name}`."
-    else:
-        channel_message = "No birthday announcement channel is set."
+    # Assign the role temporarily
+    if role in user.roles:
+        await interaction.response.send_message(
+            f"{user.display_name} already has the role `{role.name}`.", ephemeral=True
+        )
+        return
 
+    await user.add_roles(role)
     await interaction.response.send_message(
-        f"Test complete for {user.display_name}.\n{role_message}\n{channel_message}\n"
-        "The test role will be removed in 30 seconds.",
+        f"Assigned the role `{role.name}` to {user.name} for testing.",
         ephemeral=True,
     )
 
-    # Schedule cleanup after 30 seconds
+    # Send a test message to the birthday channel
+    channel_name = settings.get(str(guild.id), {}).get("birthday_channel", "general")
+    channel = discord.utils.get(guild.channels, name=channel_name)
+
+    if channel:
+        await channel.send(f"🎉 (Test) Happy Birthday, {user.mention}! 🎂")
+    else:
+        await interaction.followup.send(
+            "No birthday announcement channel is set. Please configure it using `/setup`.",
+            ephemeral=True,
+        )
+
+    # Wait for 30 seconds and then remove the role
     await asyncio.sleep(30)
-
     await user.remove_roles(role)
-    # print(f"Removed test role from {user.display_name}.")
-
-    # If temporary data was added, no need to persist it
-    # if is_temporary_data:
-    #     print(f"Temporary test completed for {user.display_name}.")
-
-
-#####################################################################################################
-# Get birthday data from data channel
-@tasks.loop(hours=1)  # This task will run every hour
-async def update_birthdays():
-    # Load the current birthdays from the file (ensure it has the latest data)
-    with open("birthdays.json", "r") as f:
-        birthdays = json.load(f)
-
-    # Iterate through all guilds
-    for guild in client.guilds:
-        guild_id = str(guild.id)
-        data_channel_name = settings.get(guild_id, {}).get("data_channel")
-        if not data_channel_name:
-            continue  # Skip if there's no data channel set for this guild
-
-        # Fetch the data channel (where users post their birthdays)
-        data_channel = discord.utils.get(guild.text_channels, name=data_channel_name)
-
-        if not data_channel:
-            continue  # Skip if the data channel is not found
-
-        # Read the last 100 messages from the channel
-        async for message in data_channel.history(limit=100):
-            # Skip if the message was sent by a bot
-            if message.author.bot:
-                continue
-
-            content = message.content.strip()
-            if not content:
-                continue  # Skip empty messages
-
-            try:
-                # Check if the message contains a valid birthday (dd-mm)
-                date = datetime.strptime(content, "%d-%m").strftime("%d-%m")
-
-                # If valid, update the birthday data for the user
-                user_id = str(message.author.id)
-                if (
-                    user_id not in birthdays
-                ):  # Only add if user doesn't already have a birthday
-                    birthdays[user_id] = {"date": date, "guild_id": guild_id}
-
-            except ValueError:
-                continue  # Skip invalid date formats
-
-    # After processing all messages, update the birthdays.json file
-    with open("birthdays.json", "w") as f:
-        json.dump(birthdays, f, indent=4)
-
-    current_time = datetime.now().strftime("%H:%M")
-    print(f"{current_time} - Updated birthdays from data channel.")
+    await interaction.followup.send(
+        f"Removed the role `{role.name}` from {user.name}. Test completed.",
+        ephemeral=True,
+    )
 
 
 #####################################################################################################
@@ -343,13 +351,8 @@ async def list_birthdays(interaction: discord.Interaction):
 
     guild_id = str(interaction.guild.id)
 
-    # Filter birthdays for the current guild
-    guild_birthdays = [
-        {"member_id": user_id, "date": data["date"]}
-        for user_id, data in birthdays.items()
-        if data["guild_id"] == guild_id
-    ]
-
+    # Check if the guild has any birthdays recorded
+    guild_birthdays = get_updated_guild_birthdays(guild_id)
     if not guild_birthdays:
         await interaction.response.send_message(
             "No birthdays found for this server.", ephemeral=True
@@ -358,13 +361,18 @@ async def list_birthdays(interaction: discord.Interaction):
 
     # Format the list of birthdays
     response = "**🎂 Birthdays in this server:**\n"
-    for entry in guild_birthdays:
-        member = interaction.guild.get_member(int(entry["member_id"]))
+    for user_id, data in guild_birthdays.items():
+
+        # Skip users with bdate as "Unknown" or None
+        if data.get("bdate") in ("Unknown", None):
+            continue
+
+        member = interaction.guild.get_member(int(user_id))
         member_name = member.name if member else "Unknown Member"
-        response += f"- {member_name}: {entry['date']}\n"
+        response += f"- {member_name}: {data['bdate']}\n"
 
     # Send the response
-    await interaction.response.send_message(response)
+    await interaction.response.send_message(response, ephemeral=False)
 
 
 #####################################################################################################
@@ -377,6 +385,43 @@ async def on_ready():
     print(f"Logged in as {client.user}")
     update_birthdays.start()
     client.loop.create_task(check_birthdays())  # Start the birthday checker
+
+
+#####################################################################################################
+# Event to run on member join
+# Load the JSON data file
+def load_data():
+    try:
+        with open(DATA_FILE, "r") as f:
+            return json.load(f)
+    except FileNotFoundError:
+        return {}  # Return empty structure if file doesn't exist
+    except json.JSONDecodeError:
+        return {}  # Handle invalid JSON gracefully
+
+
+# Save data back to the file
+def save_data(data):
+    with open(DATA_FILE, "w") as f:
+        json.dump(data, f, indent=4)
+
+
+# Event when a member joins a guild
+@client.event
+async def on_member_join(member):
+    data = load_data()
+    guild_id = str(member.guild.id)
+    user_id = str(member.id)
+
+    # Ensure the guild entry exists
+    if guild_id not in data:
+        data[guild_id] = {}
+
+    # Add the new user entry with default values
+    if user_id not in data[guild_id]:
+        data[guild_id][user_id] = {"bdate": "Unknown", "xp": 0}
+        save_data(data)  # Save the updated data
+        # print(f"Added {member} to the data file.")
 
 
 client.run(TOKEN)
