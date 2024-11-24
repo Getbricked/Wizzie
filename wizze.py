@@ -414,26 +414,43 @@ async def increase_xp_periodically():
         await asyncio.sleep(15)  # Wait for 15 seconds
 
         data = load_data()
+        # print("Current member activity:", member_last_activity)
 
-        # Check all members who sent a message in the last 15 seconds
+        # Process guilds in `data`
         for guild_id, guild_data in data.items():
-            for user_id, user_data in guild_data.items():
-                if (
-                    int(user_id) in member_last_activity
-                ):  # Check if member has sent a message
-                    last_activity_time = member_last_activity[int(user_id)]
+            int_guild_id = int(guild_id)  # Convert to int for comparison
+            if int_guild_id not in member_last_activity:
+                # print(f"Skipping guild {guild_id} (no activity)")
+                continue
 
-                    # If the member sent a message in the last 15 seconds
-                    if time.time() - last_activity_time <= 15:
-                        # Add random XP between 5 and 10
-                        xp_to_add = random.randint(5, 10)
-                        user_data["xp"] += xp_to_add
-                        # print(f"Added {xp_to_add} XP to user {user_id}.")
+            # Process users in the guild
+            for user_id, user_data in guild_data.items():
+                int_user_id = int(user_id)  # Convert to int for comparison
+                if int_user_id not in member_last_activity[int_guild_id]:
+                    # print(f"Skipping user {user_id} in guild {guild_id} (no activity)")
+                    continue
+
+                last_activity_time = member_last_activity[int_guild_id][int_user_id]
+                time_diff = time.time() - last_activity_time
+
+                # print(f"User {user_id} in guild {guild_id}: time_diff={time_diff}")
+
+                # If the member sent a message in the last 15 seconds
+                if time_diff > 15:
+                    print(f"Skipping user {user_id} (inactive)")
+                    continue
+
+                # Add random XP between 5 and 10
+                xp_to_add = random.randint(5, 10)
+                user_data["xp"] += xp_to_add
+                # print(
+                #     f"Added {xp_to_add} XP to user {user_id} in guild {guild_id}. New XP: {user_data['xp']}"
+                # )
 
         save_data(data)  # Save the updated data back to the file
-        # print(f"{datetime.now().strftime('%H:%M')} - XP updated.")
-        # Clean up all activity records every 15 seconds
-        member_last_activity.clear()  # Clear the activity tracking dictionary
+
+        # Clear the activity tracking dictionary
+        member_last_activity.clear()
 
 
 #####################################################################################################
@@ -461,35 +478,36 @@ async def on_member_join(member):
 # Function to handle message activity
 @client.event
 async def on_message(message):
+    # Ignore messages from bots
     if message.author.bot:
-        return  # Ignore messages from bots
+        return
 
     # Load the existing data
     data = load_data()
 
-    # Check if the guild exists in the data, if not, create it
-    if str(message.guild.id) not in data:
-        data[str(message.guild.id)] = {}
+    # Ensure the guild exists in the data
+    guild_id = str(message.guild.id)
+    if guild_id not in data:
+        data[guild_id] = {}
 
-    # Check if the user exists in the guild's data, if not, create it
-    if str(message.author.id) not in data[str(message.guild.id)]:
-        data[str(message.guild.id)][str(message.author.id)] = {
-            "bdate": "Unknown",
-            "xp": 0,
-        }
+    # Ensure the user exists in the guild's data
+    user_id = str(message.author.id)
+    if user_id not in data[guild_id]:
+        data[guild_id][user_id] = {"bdate": "Unknown", "xp": 0}
     else:
-        # Check if the xp attribute is missing and set it to 0 if it's missing
-        user_data = data[str(message.guild.id)][str(message.author.id)]
+        # Ensure "xp" and "bdate" are initialized
+        user_data = data[guild_id][user_id]
         if "xp" not in user_data:
-            user_data["xp"] = 0  # Initialize xp if missing
+            user_data["xp"] = 0
         if "bdate" not in user_data:
-            user_data["bdate"] = "Unknown"  # Initialize bdate if missing
+            user_data["bdate"] = "Unknown"
 
+    # Ensure the guild exists in `member_last_activity`
     if message.guild.id not in member_last_activity:
-        member_last_activity[message.author.id] = {}
+        member_last_activity[message.guild.id] = {}
 
     # Update the member's last activity timestamp
-    member_last_activity[message.author.id] = time.time()
+    member_last_activity[message.guild.id][message.author.id] = time.time()
 
     # Save the updated data
     save_data(data)

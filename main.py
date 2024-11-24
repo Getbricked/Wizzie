@@ -395,6 +395,7 @@ def save_data(data):
         json.dump(data, f, indent=4)
 
 
+# Update guild data
 def get_updated_guild_data(guild_id):
     """Retrieve all birthdays for a specific guild."""
     with open(DATA_FILE, "r") as f:
@@ -451,6 +452,42 @@ async def increase_xp_periodically():
 
         # Clear the activity tracking dictionary
         member_last_activity.clear()
+
+
+#####################################################################################################
+### XP Commands
+from level_card import generate_xp_card, calculate_level
+
+
+# Slash command to display the current user's XP and level
+@tree.command(name="xp", description="Check your current XP and level.")
+async def xp(interaction: discord.Interaction):
+    """Slash command to display the current user's XP and level."""
+    user_id = interaction.user.id
+    guild_id = interaction.guild.id
+
+    # Load the data from the JSON file
+    data = load_data()
+    guild_id_str = str(guild_id)
+    user_id_str = str(user_id)
+
+    # Check if the guild or user exists in the data
+    if guild_id_str not in data or user_id_str not in data[guild_id_str]:
+        await interaction.response.send_message(
+            f"Your data was not found. Please interact in the server to be registered.",
+            ephemeral=True,  # Only the user can see this message
+        )
+        return
+
+    # Retrieve XP and calculate level
+    user_data = data[guild_id_str][user_id_str]
+    xp = user_data.get("xp", 0)
+    level = calculate_level(xp)
+
+    # Respond with the XP and level information
+    await interaction.response.send_message(
+        f"🎉 **{interaction.user.name}**, you are at **Level {level}** with **{xp} XP**!"
+    )
 
 
 #####################################################################################################
