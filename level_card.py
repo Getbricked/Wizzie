@@ -7,15 +7,15 @@ def calculate_level_and_thresholds(xp):
     """Calculate the user's level and the current/next thresholds based on their XP."""
     level = 1
     current_threshold = 0
-    next_threshold = 300  # Level 1's threshold ends at 300 XP
+    next_threshold = 200  # Level 1's threshold ends at 200 XP
 
     # Keep increasing the level and thresholds while XP surpasses the next threshold
     while xp >= next_threshold:
         level += 1
         current_threshold = next_threshold
         next_threshold = (
-            current_threshold + 200
-        )  # Increase the threshold by 200 each level
+            current_threshold + 50 * level
+        )  # Increase the threshold each level
 
     return level, current_threshold, next_threshold
 
