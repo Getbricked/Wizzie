@@ -46,3 +46,9 @@ Wizzie is a Discord bot designed to help you manage and celebrate birthdays with
   }
 }
 ```
+
+## Font problem for ubuntu:
+
+```
+sudo apt-get install ttf-mscorefonts-installer
+```

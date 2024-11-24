@@ -438,7 +438,7 @@ async def increase_xp_periodically():
 
                 # If the member sent a message in the last 15 seconds
                 if time_diff > 15:
-                    print(f"Skipping user {user_id} (inactive)")
+                    # print(f"Skipping user {user_id} (inactive)")
                     continue
 
                 # Add random XP between 5 and 10
@@ -456,38 +456,63 @@ async def increase_xp_periodically():
 
 #####################################################################################################
 ### XP Commands
-from level_card import generate_xp_card, calculate_level
+from level_card import generate_xp_card, calculate_level_and_thresholds
 
 
 # Slash command to display the current user's XP and level
-@tree.command(name="xp", description="Check your current XP and level.")
-async def xp(interaction: discord.Interaction):
-    """Slash command to display the current user's XP and level."""
-    user_id = interaction.user.id
+@tree.command(
+    name="xp", description="Check your current XP and level, or someone else's XP."
+)
+async def xp(interaction: discord.Interaction, user: discord.User = None):
+    """Generate and send an XP card, then delete it after use."""
+
+    # If no user is specified, default to the command issuer
+    if user is None:
+        user = interaction.user
+
+    user_id = user.id
     guild_id = interaction.guild.id
 
-    # Load the data from the JSON file
+    # Load the data
     data = load_data()
     guild_id_str = str(guild_id)
     user_id_str = str(user_id)
 
-    # Check if the guild or user exists in the data
+    # Check if the user exists in the data
     if guild_id_str not in data or user_id_str not in data[guild_id_str]:
         await interaction.response.send_message(
-            f"Your data was not found. Please interact in the server to be registered.",
-            ephemeral=True,  # Only the user can see this message
+            f"{user.display_name} data was not found. Please interact in the server to be registered.",
+            ephemeral=True,
         )
         return
 
-    # Retrieve XP and calculate level
+    # Get XP and level data
     user_data = data[guild_id_str][user_id_str]
     xp = user_data.get("xp", 0)
-    level = calculate_level(xp)
 
-    # Respond with the XP and level information
-    await interaction.response.send_message(
-        f"🎉 **{interaction.user.name}**, you are at **Level {level}** with **{xp} XP**!"
+    # Calculate level and thresholds based on XP
+    level, current_threshold, next_threshold = calculate_level_and_thresholds(xp)
+
+    # Generate the XP card
+    avatar_url = user.display_avatar.url
+    username = f"{user.display_name}"  # Display name with discriminator
+    card_path = generate_xp_card(
+        username,
+        avatar_url,
+        level,
+        xp,
+        current_threshold,
+        next_threshold,
+        "./xp_card_background.png",
     )
+
+    # Send the card as a file
+    file = discord.File(card_path, filename="xp_card.png")
+    await interaction.response.send_message(file=file)
+
+    # # Optionally, delete the file after sending it
+    # if os.path.exists(card_path):
+    #     os.remove(card_path)
 
 
 #####################################################################################################

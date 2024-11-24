@@ -20,7 +20,7 @@ def calculate_level_and_thresholds(xp):
     return level, current_threshold, next_threshold
 
 
-# Gotta add some packages for this to work (adding arial fonts from windows to linux)
+# Well basically this worked for windows so ye
 def generate_xp_card(
     username,
     avatar_url,
@@ -41,15 +41,11 @@ def generate_xp_card(
     draw = ImageDraw.Draw(card)
 
     # Load fonts (replace with the path to your fonts)
-    font_large = ImageFont.truetype(
-        "/usr/share/fonts/truetype/msttcorefonts/Arial.ttf", 24
-    )
+    font_large = ImageFont.truetype("arial.ttf", 24)  # Normal font
     font_large_bold = ImageFont.truetype(
-        "/usr/share/fonts/truetype/msttcorefonts/Arial_Bold.ttf", 24
-    )  # Bold version
-    font_small = ImageFont.truetype(
-        "/usr/share/fonts/truetype/msttcorefonts/Arial.ttf", 18
-    )
+        "arialbd.ttf", 24
+    )  # Bold font (use your own bold font)
+    font_small = ImageFont.truetype("arial.ttf", 18)
 
     # Define shadow offset
     shadow_offset = (2, 2)  # Offset for the shadow
@@ -146,12 +142,12 @@ def generate_xp_card(
 
 
 # Example usage with a background image path
-# generate_xp_card(
-#     "Maria behave when??",
-#     "https://cdn.discordapp.com/attachments/1108373856613306458/1227580443352633407/image.png?ex=67445ee1&is=67430d61&hm=058f6e6ea395e38ef28130e4f3867117c44ecf70fa796d8876a9a8f89c627d33&",
-#     5,
-#     800,
-#     500,
-#     1000,
-#     "xp_card_background.png",  # Path to your background image
-# )
+generate_xp_card(
+    "Maria behave when??",
+    "https://cdn.discordapp.com/attachments/1108373856613306458/1227580443352633407/image.png?ex=67445ee1&is=67430d61&hm=058f6e6ea395e38ef28130e4f3867117c44ecf70fa796d8876a9a8f89c627d33&",
+    5,
+    800,
+    500,
+    1000,
+    "xp_card_background.png",  # Path to your background image
+)
