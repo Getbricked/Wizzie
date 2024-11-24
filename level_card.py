@@ -28,6 +28,7 @@ def generate_xp_card(
     xp,
     current_threshold,
     next_threshold,
+    rank,
     background_image_path,
 ):
     # Dimensions for the card
@@ -81,8 +82,19 @@ def generate_xp_card(
         username,
         (140, 20),
         font_large_bold,
-        (255, 255, 255),
-        (0, 0, 0),
+        (255, 255, 255),  # White color for username
+        (0, 0, 0),  # Shadow color (black)
+        shadow_offset,
+    )
+
+    # Draw rank (#1) in red with shadow, positioned to the right of the username
+    draw_text_with_shadow(
+        draw,
+        f"Rank: #{rank}",
+        (300, 60),  # Positioning rank to the left of the username
+        font_large_bold,
+        (255, 0, 0),  # Red color for rank
+        (0, 0, 0),  # Shadow color (black)
         shadow_offset,
     )
 
@@ -126,7 +138,7 @@ def generate_xp_card(
             progress_bar_x + progress_bar_width,
             progress_bar_y + progress_bar_height,
         ],
-        fill=(50, 50, 50),
+        fill=(50, 50, 50),  # Dark background for the progress bar
     )
     # Draw progress bar fill
     draw.rectangle(
