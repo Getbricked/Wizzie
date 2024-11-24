@@ -15,6 +15,7 @@ import random
 TOKEN_FILE = "token.json"
 DATA_FILE = "data.json"
 CURRENT_TIME = datetime.now().strftime("%H:%M")
+SETTINGS_FILE = "settings.json"
 
 # Load Token
 if not os.path.exists(TOKEN_FILE):
@@ -36,11 +37,11 @@ with open(DATA_FILE, "r") as f:
     birthdays = json.load(f)
 
 # Initialize or load settings data
-settings_file = "settings.json"
-if not os.path.exists(settings_file):
-    with open(settings_file, "w") as f:
+
+if not os.path.exists(SETTINGS_FILE):
+    with open(SETTINGS_FILE, "w") as f:
         json.dump({}, f)
-with open(settings_file, "r") as f:
+with open(SETTINGS_FILE, "r") as f:
     settings = json.load(f)
 
 
@@ -232,7 +233,7 @@ async def add_birthday(
 
 
 #####################################################################################################
-# Command to setup the birthday role, announcement channel, and data collection channel
+# Setup commands
 @tree.command(
     name="setup",
     description="Set the birthday role, announcement channel, and data collection channel (Admins only)",
@@ -264,7 +265,7 @@ async def app_setup(
     settings[guild_id]["data_channel"] = data_channel.name
 
     # Save settings to the file
-    with open(settings_file, "w") as f:
+    with open(SETTINGS_FILE, "w") as f:
         json.dump(settings, f, indent=4)
 
     await interaction.response.send_message(
