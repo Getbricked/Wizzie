@@ -7,6 +7,8 @@ import os
 from dotenv import load_dotenv
 import asyncio
 from datetime import datetime, timedelta
+import time
+import random
 
 
 # Static parameters
@@ -376,20 +378,7 @@ async def list_birthdays(interaction: discord.Interaction):
 
 
 #####################################################################################################
-# Event to run when the bot is ready
-@client.event
-async def on_ready():
-    await tree.sync()  # Sync commands to Discord
-    activity = discord.Game(name="Cooking Aki 🤣")
-    await client.change_presence(status=discord.Status.online, activity=activity)
-    print(f"Logged in as {client.user}")
-    update_birthdays.start()
-    client.loop.create_task(check_birthdays())  # Start the birthday checker
-
-
-#####################################################################################################
-# Event to run on member join
-# Load the JSON data file
+# Some utils
 def load_data():
     try:
         with open(DATA_FILE, "r") as f:
@@ -406,7 +395,52 @@ def save_data(data):
         json.dump(data, f, indent=4)
 
 
-# Event when a member joins a guild
+def get_updated_guild_data(guild_id):
+    """Retrieve all birthdays for a specific guild."""
+    with open(DATA_FILE, "r") as f:
+        data = json.load(f)
+    return data.get(str(guild_id), {})
+
+
+#####################################################################################################
+# Function to increase XP every 15 seconds for members who chatted
+
+# Global dictionary to track when members last sent a message
+member_last_activity = {}
+
+
+async def increase_xp_periodically():
+    while True:
+        await asyncio.sleep(15)  # Wait for 15 seconds
+
+        data = load_data()
+
+        # Check all members who sent a message in the last 15 seconds
+        for guild_id, guild_data in data.items():
+            for user_id, user_data in guild_data.items():
+                if (
+                    int(user_id) in member_last_activity
+                ):  # Check if member has sent a message
+                    last_activity_time = member_last_activity[int(user_id)]
+
+                    # If the member sent a message in the last 15 seconds
+                    if time.time() - last_activity_time <= 15:
+                        # Add random XP between 5 and 10
+                        xp_to_add = random.randint(5, 10)
+                        user_data["xp"] += xp_to_add
+                        # print(f"Added {xp_to_add} XP to user {user_id}.")
+
+        save_data(data)  # Save the updated data back to the file
+        # print(f"{datetime.now().strftime('%H:%M')} - XP updated.")
+        # Clean up all activity records every 15 seconds
+        member_last_activity.clear()  # Clear the activity tracking dictionary
+
+
+#####################################################################################################
+### Bot events
+
+
+# On member join event: add user entry to data.json
 @client.event
 async def on_member_join(member):
     data = load_data()
@@ -422,6 +456,65 @@ async def on_member_join(member):
         data[guild_id][user_id] = {"bdate": "Unknown", "xp": 0}
         save_data(data)  # Save the updated data
         # print(f"Added {member} to the data file.")
+
+
+# Function to handle message activity
+@client.event
+async def on_message(message):
+    if message.author.bot:
+        return  # Ignore messages from bots
+
+    # Load the existing data
+    data = load_data()
+
+    # Check if the guild exists in the data, if not, create it
+    if str(message.guild.id) not in data:
+        data[str(message.guild.id)] = {}
+
+    # Check if the user exists in the guild's data, if not, create it
+    if str(message.author.id) not in data[str(message.guild.id)]:
+        data[str(message.guild.id)][str(message.author.id)] = {
+            "bdate": "Unknown",
+            "xp": 0,
+        }
+    else:
+        # Check if the xp attribute is missing and set it to 0 if it's missing
+        user_data = data[str(message.guild.id)][str(message.author.id)]
+        if "xp" not in user_data:
+            user_data["xp"] = 0  # Initialize xp if missing
+        if "bdate" not in user_data:
+            user_data["bdate"] = "Unknown"  # Initialize bdate if missing
+
+    if message.guild.id not in member_last_activity:
+        member_last_activity[message.author.id] = {}
+
+    # Update the member's last activity timestamp
+    member_last_activity[message.author.id] = time.time()
+
+    # Save the updated data
+    save_data(data)
+
+
+# Event to run when the bot is ready
+@client.event
+async def on_ready():
+    await tree.sync()  # Sync commands to Discord
+
+    # Display activity : Cooking myself kek
+    activity = discord.Game(name="Cooking Aki 🤣")
+    await client.change_presence(status=discord.Status.online, activity=activity)
+
+    # Indicate login status
+    print(f"Logged in as {client.user}")
+
+    # Update birthday data (from data channel)
+    update_birthdays.start()
+
+    # Check for people birthday daily
+    client.loop.create_task(check_birthdays())
+
+    # Xp
+    client.loop.create_task(increase_xp_periodically())
 
 
 client.run(TOKEN)
