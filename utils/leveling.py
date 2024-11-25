@@ -1,6 +1,13 @@
 from PIL import Image, ImageDraw, ImageFont
 import requests
 from io import BytesIO
+from utils.data import load_data, save_data
+import random
+import asyncio
+import time
+
+#####################################################################################################
+# Function to calculate the user's level and thresholds based on their XP
 
 
 def calculate_level_and_thresholds(xp):
@@ -20,7 +27,91 @@ def calculate_level_and_thresholds(xp):
     return level, current_threshold, next_threshold
 
 
+#####################################################################################################
+# Function to calculate the user's rank based on their XP in the server
+
+
+def calculate_user_rank(user_id, guild_id):
+    """Calculate the user's rank based on their XP in the server."""
+    # Load the data
+    data = load_data()
+    guild_id_str = str(guild_id)
+
+    if guild_id_str not in data:
+        return None  # No data for this server
+
+    # Get all users' XP data in the server
+    guild_data = data[guild_id_str]
+    users = []
+
+    for user_id_str, user_data in guild_data.items():
+        xp = user_data.get("xp", 0)
+        level, current_threshold, next_threshold = calculate_level_and_thresholds(xp)
+        users.append((user_id_str, xp, level))
+
+    # Sort users by XP (highest to lowest)
+    users.sort(key=lambda x: x[1], reverse=True)
+
+    # Find the rank of the specific user
+    for rank, (user_id_str, xp, level) in enumerate(users, 1):
+        if user_id_str == str(user_id):
+            return rank  # Return rank (1-based)
+
+    return None  # In case the user is not found (shouldn't happen)
+
+
+#####################################################################################################
+# Function to increase XP every 15 seconds for members who chatted
+
+
+async def increase_xp_periodically(member_last_activity):
+    while True:
+        await asyncio.sleep(15)  # Wait for 15 seconds
+
+        data = load_data()
+        # print("Current member activity:", member_last_activity)
+
+        # Process guilds in `data`
+        for guild_id, guild_data in data.items():
+            int_guild_id = int(guild_id)  # Convert to int for comparison
+            if int_guild_id not in member_last_activity:
+                # print(f"Skipping guild {guild_id} (no activity)")
+                continue
+
+            # Process users in the guild
+            for user_id, user_data in guild_data.items():
+                int_user_id = int(user_id)  # Convert to int for comparison
+                if int_user_id not in member_last_activity[int_guild_id]:
+                    # print(f"Skipping user {user_id} in guild {guild_id} (no activity)")
+                    continue
+
+                last_activity_time = member_last_activity[int_guild_id][int_user_id]
+                time_diff = time.time() - last_activity_time
+
+                # print(f"User {user_id} in guild {guild_id}: time_diff={time_diff}")
+
+                # If the member sent a message in the last 15 seconds
+                if time_diff > 15:
+                    # print(f"Skipping user {user_id} (inactive)")
+                    continue
+
+                # Add random XP between 5 and 10
+                xp_to_add = random.randint(5, 10)
+                user_data["xp"] += xp_to_add
+                # print(
+                #     f"Added {xp_to_add} XP to user {user_id} in guild {guild_id}. New XP: {user_data['xp']}"
+                # )
+
+        save_data(data)  # Save the updated data back to the file
+
+        # Clear the activity tracking dictionary
+        member_last_activity.clear()
+
+
+#####################################################################################################
 # Gotta add some packages for this to work (adding arial fonts from windows to linux)
+
+
 def generate_xp_card(
     username,
     avatar_url,

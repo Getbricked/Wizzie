@@ -8,14 +8,9 @@ from dotenv import load_dotenv
 import asyncio
 from datetime import datetime, timedelta
 import time
-import random
-
 
 # Static parameters
-TOKEN_FILE = "token.json"
-DATA_FILE = "data.json"
-CURRENT_TIME = datetime.now().strftime("%H:%M")
-SETTINGS_FILE = "settings.json"
+from utils.const import TOKEN_FILE, DATA_FILE, CURRENT_TIME, SETTINGS_FILE
 
 # Load Token
 if not os.path.exists(TOKEN_FILE):
@@ -28,50 +23,14 @@ with open("token.json", "r") as f:
 load_dotenv()
 
 #####################################################################################################
-# Initialize or load birthday data
 
-if not os.path.exists(DATA_FILE):
-    with open(DATA_FILE, "w") as f:
-        json.dump({}, f)
-with open(DATA_FILE, "r") as f:
-    birthdays = json.load(f)
 
 # Initialize or load settings data
-
 if not os.path.exists(SETTINGS_FILE):
     with open(SETTINGS_FILE, "w") as f:
         json.dump({}, f)
 with open(SETTINGS_FILE, "r") as f:
     settings = json.load(f)
-
-
-#####################################################################################################
-# Helper Functions
-def save_birthdays():
-    """Save the updated birthday data to the file."""
-    with open(DATA_FILE, "w") as f:
-        json.dump(birthdays, f, indent=4)
-
-
-def add_or_update_birthday(guild_id, user_id, bdate):
-    """Add or update a birthday for a user in the given guild."""
-    guild_id = str(guild_id)
-    user_id = str(user_id)
-
-    if guild_id not in birthdays:
-        birthdays[guild_id] = {}
-
-    birthdays[guild_id][user_id] = {
-        "bdate": bdate,
-        "xp": birthdays.get(guild_id, {}).get(user_id, {}).get("xp", 0),
-    }
-
-
-def get_updated_guild_birthdays(guild_id):
-    """Retrieve all birthdays for a specific guild."""
-    with open(DATA_FILE, "r") as f:
-        birthdays = json.load(f)
-    return birthdays.get(str(guild_id), {})
 
 
 #####################################################################################################
@@ -82,122 +41,11 @@ intents.messages = True
 client = discord.Client(intents=intents)
 tree = app_commands.CommandTree(client)
 
-
-#####################################################################################################
-# Birthday Checker Task
-async def check_birthdays():
-    while True:
-        now = datetime.now()
-        today = now.strftime("%d-%m")
-
-        for guild_id, users in birthdays.items():
-            guild = client.get_guild(int(guild_id))
-            if not guild:
-                continue
-
-            role_name = settings.get(guild_id, {}).get("birthday_role", "Birthday")
-            role = discord.utils.get(guild.roles, name=role_name)
-            if not role:
-                continue
-
-            for user_id, data in users.items():
-                user = guild.get_member(int(user_id))
-                if not user:
-                    continue
-
-                if data["bdate"] == today:
-                    if role not in user.roles:
-                        await user.add_roles(role)
-                        channel_name = settings.get(guild_id, {}).get(
-                            "birthday_channel", "general"
-                        )
-                        channel = discord.utils.get(guild.channels, name=channel_name)
-                        if channel:
-                            await channel.send(f"🎉 Happy Birthday, {user.mention}! 🎂")
-                elif role in user.roles:
-                    await user.remove_roles(role)
-
-        # Wait until the next day
-        next_day = now + timedelta(days=1)
-        next_update = datetime.combine(next_day, datetime.min.time())
-        hours = int(((next_update - now).seconds) / 3600)
-        minutes = int(((next_update - now).seconds) / 60) % 60
-        print(
-            f"{CURRENT_TIME} - Next birthday update in {hours} hours and {minutes} minutes."
-        )
-        await asyncio.sleep((next_update - now).seconds)
-
-
-#####################################################################################################
-# Get birthday data from data channel
-@tasks.loop(hours=1)  # This task will run every hour
-async def update_birthdays():
-    try:
-        # Load the current birthdays from the file (ensure it has the latest data)
-        with open(DATA_FILE, "r") as f:
-            birthdays = json.load(f)
-    except (FileNotFoundError, json.JSONDecodeError):
-        print("Error reading birthdays file. Initializing empty data.")
-        birthdays = {}
-
-    # Iterate through all guilds
-    for guild in client.guilds:
-        guild_id = str(guild.id)
-        data_channel_name = settings.get(guild_id, {}).get("data_channel")
-
-        if not data_channel_name:
-            print(f"Guild {guild_id}: No data channel set.")
-            continue  # Skip if there's no data channel set for this guild
-
-        # Fetch the data channel (where users post their birthdays)
-        data_channel = discord.utils.get(guild.text_channels, name=data_channel_name)
-
-        if not data_channel:
-            print(f"Guild {guild_id}: Data channel '{data_channel_name}' not found.")
-            continue  # Skip if the data channel is not found
-
-        print(f"Guild {guild_id}: Reading messages from '{data_channel_name}'.")
-
-        # Initialize guild data if not present
-        if guild_id not in birthdays:
-            birthdays[guild_id] = {}
-
-        # Process messages in the data channel
-        async for message in data_channel.history(limit=100):
-            # Skip if the message was sent by a bot
-            if message.author.bot:
-                continue
-
-            content = message.content.strip()
-            if not content:
-                continue  # Skip empty messages
-
-            try:
-                # Validate if the content is a valid birthday (dd-mm format)
-                bdate = datetime.strptime(content, "%d-%m").strftime("%d-%m")
-                user_id = str(message.author.id)
-
-                # Update the birthdays data for the guild
-
-                birthdays[guild_id][user_id] = {
-                    "bdate": bdate,
-                    "xp": birthdays.get(guild_id, {}).get(user_id, {}).get("xp", 0),
-                }
-                print(
-                    f"Added birthday for user {message.author.name} in guild {guild.name}: {bdate}"
-                )
-
-            except ValueError:
-                # print(f"Invalid bdate format in message: {content}")
-                continue  # Skip invalid bdate formats
-
-    # Save the updated birthdays data to the file
-    try:
-        with open(DATA_FILE, "w") as f:
-            json.dump(birthdays, f, indent=4)
-        print(f"{datetime.now().strftime('%H:%M')} - Updated birthdays file.")
-    except IOError as e:
-        print(f"Error writing to birthdays file: {e}")
+from utils.birthday import (
+    add_or_update_birthday,
+    get_updated_guild_birthdays,
+    save_birthdays,
+)
 
 
 #####################################################################################################
@@ -381,114 +229,14 @@ async def list_birthdays(interaction: discord.Interaction):
 
 
 #####################################################################################################
-# Some utils
-def load_data():
-    try:
-        with open(DATA_FILE, "r") as f:
-            return json.load(f)
-    except FileNotFoundError:
-        return {}  # Return empty structure if file doesn't exist
-    except json.JSONDecodeError:
-        return {}  # Handle invalid JSON gracefully
-
-
-# Save data back to the file
-def save_data(data):
-    with open(DATA_FILE, "w") as f:
-        json.dump(data, f, indent=4)
-
-
-# Update guild data
-def get_updated_guild_data(guild_id):
-    """Retrieve all birthdays for a specific guild."""
-    with open(DATA_FILE, "r") as f:
-        data = json.load(f)
-    return data.get(str(guild_id), {})
-
-
-#####################################################################################################
-# Function to increase XP every 15 seconds for members who chatted
-
-# Global dictionary to track when members last sent a message
-member_last_activity = {}
-
-
-async def increase_xp_periodically():
-    while True:
-        await asyncio.sleep(15)  # Wait for 15 seconds
-
-        data = load_data()
-        # print("Current member activity:", member_last_activity)
-
-        # Process guilds in `data`
-        for guild_id, guild_data in data.items():
-            int_guild_id = int(guild_id)  # Convert to int for comparison
-            if int_guild_id not in member_last_activity:
-                # print(f"Skipping guild {guild_id} (no activity)")
-                continue
-
-            # Process users in the guild
-            for user_id, user_data in guild_data.items():
-                int_user_id = int(user_id)  # Convert to int for comparison
-                if int_user_id not in member_last_activity[int_guild_id]:
-                    # print(f"Skipping user {user_id} in guild {guild_id} (no activity)")
-                    continue
-
-                last_activity_time = member_last_activity[int_guild_id][int_user_id]
-                time_diff = time.time() - last_activity_time
-
-                # print(f"User {user_id} in guild {guild_id}: time_diff={time_diff}")
-
-                # If the member sent a message in the last 15 seconds
-                if time_diff > 15:
-                    # print(f"Skipping user {user_id} (inactive)")
-                    continue
-
-                # Add random XP between 5 and 10
-                xp_to_add = random.randint(5, 10)
-                user_data["xp"] += xp_to_add
-                # print(
-                #     f"Added {xp_to_add} XP to user {user_id} in guild {guild_id}. New XP: {user_data['xp']}"
-                # )
-
-        save_data(data)  # Save the updated data back to the file
-
-        # Clear the activity tracking dictionary
-        member_last_activity.clear()
-
-
-#####################################################################################################
 ### XP Commands
-from level_card import generate_xp_card, calculate_level_and_thresholds
-
-
-def calculate_user_rank(user_id, guild_id):
-    """Calculate the user's rank based on their XP in the server."""
-    # Load the data
-    data = load_data()
-    guild_id_str = str(guild_id)
-
-    if guild_id_str not in data:
-        return None  # No data for this server
-
-    # Get all users' XP data in the server
-    guild_data = data[guild_id_str]
-    users = []
-
-    for user_id_str, user_data in guild_data.items():
-        xp = user_data.get("xp", 0)
-        level, current_threshold, next_threshold = calculate_level_and_thresholds(xp)
-        users.append((user_id_str, xp, level))
-
-    # Sort users by XP (highest to lowest)
-    users.sort(key=lambda x: x[1], reverse=True)
-
-    # Find the rank of the specific user
-    for rank, (user_id_str, xp, level) in enumerate(users, 1):
-        if user_id_str == str(user_id):
-            return rank  # Return rank (1-based)
-
-    return None  # In case the user is not found (shouldn't happen)
+from utils.leveling import (
+    generate_xp_card,
+    calculate_level_and_thresholds,
+    calculate_user_rank,
+    increase_xp_periodically,
+)
+from utils.data import load_data, save_data
 
 
 # Slash command to display the current user's XP and level
@@ -602,15 +350,15 @@ async def leaderboard(interaction: discord.Interaction):
         )  # Fetch user details
         username = user.display_name if user else "Unknown User"
 
-        # Apply color to top 3 ranks
-        if user_rank == 1:
-            color = discord.Color.red()
-        elif user_rank == 2:
-            color = discord.Color.green()
-        elif user_rank == 3:
-            color = discord.Color.blue()
-        else:
-            color = discord.Color(0xFFFFFF)  # Default color for other ranks
+        # # Apply color to top 3 ranks
+        # if user_rank == 1:
+        #     color = discord.Color.red()
+        # elif user_rank == 2:
+        #     color = discord.Color.green()
+        # elif user_rank == 3:
+        #     color = discord.Color.blue()
+        # else:
+        #     color = discord.Color(0xFFFFFF)  # Default color for other ranks
 
         embed.add_field(
             name=f"**#{user_rank}** -  {username}",
@@ -649,6 +397,11 @@ async def on_member_join(member):
 
 
 # Function to handle message activity
+
+# Global dictionary to track when members last sent a message
+member_last_activity = {}
+
+
 @client.event
 async def on_message(message):
     # Ignore messages from bots
@@ -687,6 +440,10 @@ async def on_message(message):
 
 
 # Event to run when the bot is ready
+
+from utils.birthday import check_birthdays, update_birthdays
+
+
 @client.event
 async def on_ready():
     await tree.sync()  # Sync commands to Discord
@@ -705,7 +462,7 @@ async def on_ready():
     client.loop.create_task(check_birthdays())
 
     # Xp
-    client.loop.create_task(increase_xp_periodically())
+    client.loop.create_task(increase_xp_periodically(member_last_activity))
 
 
 client.run(TOKEN)
