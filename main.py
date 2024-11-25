@@ -117,9 +117,12 @@ from utils.leveling import increase_xp_periodically
 from commands.birthday import add_birthday, app_setup, list_birthdays, test_birthday
 from commands.leveling import xp, leaderboard
 
-tree.add_command(
-    add_birthday, app_setup, list_birthdays, test_birthday, xp, leaderboard
-)
+tree.add_command(add_birthday)
+tree.add_command(app_setup)
+tree.add_command(list_birthdays)
+tree.add_command(test_birthday)
+tree.add_command(xp)
+tree.add_command(leaderboard)
 
 
 @client.event
