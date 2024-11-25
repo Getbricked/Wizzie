@@ -61,7 +61,10 @@ def add_or_update_birthday(guild_id, user_id, bdate):
     if guild_id not in birthdays:
         birthdays[guild_id] = {}
 
-    birthdays[guild_id][user_id] = {"bdate": bdate}
+    birthdays[guild_id][user_id] = {
+        "bdate": bdate,
+        "xp": birthdays.get(guild_id, {}).get(user_id, {}).get("xp", 0),
+    }
 
 
 def get_updated_guild_birthdays(guild_id):
@@ -175,15 +178,14 @@ async def update_birthdays():
                 user_id = str(message.author.id)
 
                 # Update the birthdays data for the guild
-                if user_id not in birthdays[guild_id]:
-                    birthdays[guild_id][user_id] = {"bdate": bdate}
-                    print(
-                        f"Added birthday for user {message.author.name} in guild {guild.name}: {bdate}"
-                    )
-                else:
-                    print(
-                        f"Skipped duplicate birthday for {message.author.name} in guild {guild.name}."
-                    )
+
+                birthdays[guild_id][user_id] = {
+                    "bdate": bdate,
+                    "xp": birthdays.get(guild_id, {}).get(user_id, {}).get("xp", 0),
+                }
+                print(
+                    f"Added birthday for user {message.author.name} in guild {guild.name}: {bdate}"
+                )
 
             except ValueError:
                 # print(f"Invalid bdate format in message: {content}")
@@ -690,7 +692,7 @@ async def on_ready():
     await tree.sync()  # Sync commands to Discord
 
     # Display activity : Cooking myself kek
-    activity = discord.Game(name="Cooking Aki 🤣")
+    activity = discord.Game(name="Aki 🤣")
     await client.change_presence(status=discord.Status.online, activity=activity)
 
     # Indicate login status

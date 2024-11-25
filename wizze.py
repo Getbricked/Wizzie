@@ -15,6 +15,7 @@ import random
 TOKEN_FILE = "token.json"
 DATA_FILE = "data.json"
 CURRENT_TIME = datetime.now().strftime("%H:%M")
+SETTINGS_FILE = "settings.json"
 
 # Load Token
 if not os.path.exists(TOKEN_FILE):
@@ -36,11 +37,11 @@ with open(DATA_FILE, "r") as f:
     birthdays = json.load(f)
 
 # Initialize or load settings data
-settings_file = "settings.json"
-if not os.path.exists(settings_file):
-    with open(settings_file, "w") as f:
+
+if not os.path.exists(SETTINGS_FILE):
+    with open(SETTINGS_FILE, "w") as f:
         json.dump({}, f)
-with open(settings_file, "r") as f:
+with open(SETTINGS_FILE, "r") as f:
     settings = json.load(f)
 
 
@@ -60,7 +61,10 @@ def add_or_update_birthday(guild_id, user_id, bdate):
     if guild_id not in birthdays:
         birthdays[guild_id] = {}
 
-    birthdays[guild_id][user_id] = {"bdate": bdate}
+    birthdays[guild_id][user_id] = {
+        "bdate": bdate,
+        "xp": birthdays.get(guild_id, {}).get(user_id, {}).get("xp", 0),
+    }
 
 
 def get_updated_guild_birthdays(guild_id):
@@ -174,15 +178,14 @@ async def update_birthdays():
                 user_id = str(message.author.id)
 
                 # Update the birthdays data for the guild
-                if user_id not in birthdays[guild_id]:
-                    birthdays[guild_id][user_id] = {"bdate": bdate}
-                    print(
-                        f"Added birthday for user {message.author.name} in guild {guild.name}: {bdate}"
-                    )
-                else:
-                    print(
-                        f"Skipped duplicate birthday for {message.author.name} in guild {guild.name}."
-                    )
+
+                birthdays[guild_id][user_id] = {
+                    "bdate": bdate,
+                    "xp": birthdays.get(guild_id, {}).get(user_id, {}).get("xp", 0),
+                }
+                print(
+                    f"Added birthday for user {message.author.name} in guild {guild.name}: {bdate}"
+                )
 
             except ValueError:
                 # print(f"Invalid bdate format in message: {content}")
@@ -232,7 +235,7 @@ async def add_birthday(
 
 
 #####################################################################################################
-# Command to setup the birthday role, announcement channel, and data collection channel
+# Setup commands
 @tree.command(
     name="setup",
     description="Set the birthday role, announcement channel, and data collection channel (Admins only)",
@@ -264,7 +267,7 @@ async def app_setup(
     settings[guild_id]["data_channel"] = data_channel.name
 
     # Save settings to the file
-    with open(settings_file, "w") as f:
+    with open(SETTINGS_FILE, "w") as f:
         json.dump(settings, f, indent=4)
 
     await interaction.response.send_message(
@@ -395,6 +398,7 @@ def save_data(data):
         json.dump(data, f, indent=4)
 
 
+# Update guild data
 def get_updated_guild_data(guild_id):
     """Retrieve all birthdays for a specific guild."""
     with open(DATA_FILE, "r") as f:
@@ -437,7 +441,7 @@ async def increase_xp_periodically():
 
                 # If the member sent a message in the last 15 seconds
                 if time_diff > 15:
-                    print(f"Skipping user {user_id} (inactive)")
+                    # print(f"Skipping user {user_id} (inactive)")
                     continue
 
                 # Add random XP between 5 and 10
@@ -451,6 +455,175 @@ async def increase_xp_periodically():
 
         # Clear the activity tracking dictionary
         member_last_activity.clear()
+
+
+#####################################################################################################
+### XP Commands
+from level_card import generate_xp_card, calculate_level_and_thresholds
+
+
+def calculate_user_rank(user_id, guild_id):
+    """Calculate the user's rank based on their XP in the server."""
+    # Load the data
+    data = load_data()
+    guild_id_str = str(guild_id)
+
+    if guild_id_str not in data:
+        return None  # No data for this server
+
+    # Get all users' XP data in the server
+    guild_data = data[guild_id_str]
+    users = []
+
+    for user_id_str, user_data in guild_data.items():
+        xp = user_data.get("xp", 0)
+        level, current_threshold, next_threshold = calculate_level_and_thresholds(xp)
+        users.append((user_id_str, xp, level))
+
+    # Sort users by XP (highest to lowest)
+    users.sort(key=lambda x: x[1], reverse=True)
+
+    # Find the rank of the specific user
+    for rank, (user_id_str, xp, level) in enumerate(users, 1):
+        if user_id_str == str(user_id):
+            return rank  # Return rank (1-based)
+
+    return None  # In case the user is not found (shouldn't happen)
+
+
+# Slash command to display the current user's XP and level
+@tree.command(name="xp", description="Check XP and level.")
+async def xp(interaction: discord.Interaction, user: discord.User = None):
+    """Generate and send an XP card, then delete it after use."""
+
+    # If no user is specified, default to the command issuer
+    if user is None:
+        user = interaction.user
+
+    user_id = user.id
+    guild_id = interaction.guild.id
+
+    # Load the data
+    data = load_data()
+    guild_id_str = str(guild_id)
+    user_id_str = str(user_id)
+
+    if guild_id_str not in data or user_id_str not in data[guild_id_str]:
+        await interaction.response.send_message(
+            "Your data was not found. Please interact in the server to be registered.",
+            ephemeral=True,
+        )
+        return
+
+    # Get XP and level data
+    user_data = data[guild_id_str][user_id_str]
+    xp = user_data.get("xp", 0)
+
+    # Calculate level and thresholds based on XP
+    level, current_threshold, next_threshold = calculate_level_and_thresholds(xp)
+
+    # Calculate rank based on XP
+    rank = calculate_user_rank(user_id, guild_id)
+
+    # Generate the XP card
+    avatar_url = user.display_avatar.url
+    username = f"{user.display_name}"
+    card_path = generate_xp_card(
+        username,
+        avatar_url,
+        level,
+        xp,
+        current_threshold,
+        next_threshold,
+        rank,  # Include the rank in the XP card
+        "./xp_card_background.png",
+    )
+
+    # Send the card as a file
+    file = discord.File(card_path, filename="xp_card.png")
+    await interaction.response.send_message(file=file)
+
+    # # Optionally, delete the file after sending it
+    # if os.path.exists(card_path):
+    #     os.remove(card_path)
+
+
+@tree.command(
+    name="leaderboard", description="Display the XP leaderboard for the server."
+)
+async def leaderboard(interaction: discord.Interaction):
+    """Generate and send the XP leaderboard as an embed."""
+    guild_id = interaction.guild.id
+
+    # Load the data
+    data = load_data()
+    guild_id_str = str(guild_id)
+
+    if guild_id_str not in data:
+        await interaction.response.send_message(
+            "No data found for this server. Please ensure that XP data has been tracked.",
+            ephemeral=True,
+        )
+        return
+
+    # Get the users' XP data
+    guild_data = data[guild_id_str]
+
+    # Prepare the leaderboard data
+    leaderboard_data = []
+    for user_id_str, user_data in guild_data.items():
+        # Skip users with no XP data
+        xp = user_data.get("xp", 0)
+        if xp == "Unknown":  # If XP is unknown, set it to 0
+            xp = 0
+
+        level, current_threshold, next_threshold = calculate_level_and_thresholds(xp)
+        rank = calculate_user_rank(
+            int(user_id_str), guild_id
+        )  # Use the existing function to get the rank
+        leaderboard_data.append((user_id_str, rank, xp, level))
+
+    # Sort the leaderboard by rank (ascending order)
+    leaderboard_data.sort(key=lambda x: x[1])
+
+    # Create the embed with a black background (using Color(0x000000) for black)
+    embed = discord.Embed(
+        title="XP Leaderboard",
+        description="Top players in the server",
+        color=discord.Color(0x000000),  # Black background
+    )
+
+    # Add leaderboard entries
+    for rank, (user_id_str, user_rank, xp, level) in enumerate(
+        leaderboard_data, start=1
+    ):
+        user = await interaction.guild.fetch_member(
+            int(user_id_str)
+        )  # Fetch user details
+        username = user.display_name if user else "Unknown User"
+
+        # Apply color to top 3 ranks
+        if user_rank == 1:
+            color = discord.Color.red()
+        elif user_rank == 2:
+            color = discord.Color.green()
+        elif user_rank == 3:
+            color = discord.Color.blue()
+        else:
+            color = discord.Color(0xFFFFFF)  # Default color for other ranks
+
+        embed.add_field(
+            name=f"**#{user_rank}** -  {username}",
+            value=f"Level {level} - {xp} XP",
+            inline=False,
+        )
+
+        # Limit to first 10 users to avoid long messages
+        if rank >= 10:
+            break
+
+    # Send the embed
+    await interaction.response.send_message(embed=embed)
 
 
 #####################################################################################################
