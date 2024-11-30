@@ -2,6 +2,10 @@
 
 Wizzie is a Discord bot made from discord.py!
 
+## Invite link
+
+[text](https://discord.com/oauth2/authorize?client_id=1171940876382130206&permissions=8&integration_type=0&scope=bot)
+
 ## Features
 
 - **Birthday Data Collect**: Get server members's birthday data from a channel.
