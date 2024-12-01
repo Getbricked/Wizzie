@@ -131,10 +131,20 @@ async def increase_xp_periodically(member_last_activity, client):
         await asyncio.sleep(15)  # Wait for 15 seconds
 
         data = load_data()
-        # print("Current member activity:", member_last_activity)
-        # Process guilds in `data`
+        # Load settings
+        if not os.path.exists(SETTINGS_FILE):
+            with open(SETTINGS_FILE, "w") as f:
+                json.dump({}, f)
+        with open(SETTINGS_FILE, "r") as f:
+            settings = json.load(f)
+
         for guild_id, guild_data in data.items():
-            int_guild_id = int(guild_id)  # Convert to int for comparison
+            int_guild_id = int(guild_id)
+
+            guild_settings = settings.get(str(guild_id), {})
+            if not guild_settings.get("level", True):
+                continue  # Convert to int for comparison
+
             if int_guild_id not in member_last_activity:
                 # print(f"Skipping guild {guild_id} (no activity)")
                 continue
