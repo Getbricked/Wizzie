@@ -1,9 +1,10 @@
 import discord
 import os
 from discord import app_commands
-
+import json
 
 from utils.client import setup_client
+from utils.const import SETTINGS_FILE
 
 client, tree = setup_client()
 
@@ -150,3 +151,75 @@ async def leaderboard(interaction: discord.Interaction):
 
     # Send the embed
     await interaction.response.send_message(embed=embed)
+
+
+@tree.command(name="enable-xp", description="Enable XP tracking for a channel.")
+@app_commands.checks.has_permissions(administrator=True)
+async def enable_xp(interaction: discord.Interaction, channel: discord.TextChannel):
+    """Enable XP tracking for a channel."""
+    guild_id = interaction.guild.id
+    channel_id = channel.id
+
+    # Load the settings
+    with open(SETTINGS_FILE, "r") as f:
+        settings = json.load(f)
+    guild_id_str = str(guild_id)
+
+    # Ensure the guild settings exist
+    if guild_id_str not in settings:
+        settings[guild_id_str] = {}
+
+    # Ensure the ignore list exists
+    if "ignore_channel" not in settings[guild_id_str]:
+        settings[guild_id_str]["ignore_channel"] = []
+
+    # Remove the channel from the ignore list if it's there
+    if channel_id in settings[guild_id_str]["ignore_channel"]:
+        settings[guild_id_str]["ignore_channel"].remove(channel_id)
+        with open(SETTINGS_FILE, "w") as f:
+            json.dump(settings, f, indent=4)
+        await interaction.response.send_message(
+            f"Channel {channel.mention} has been enabled for XP tracking.",
+            ephemeral=True,
+        )
+    else:
+        await interaction.response.send_message(
+            f"Channel {channel.mention} is already enabled for XP tracking.",
+            ephemeral=True,
+        )
+
+
+@tree.command(name="disable-xp", description="Disable XP tracking for a channel.")
+@app_commands.checks.has_permissions(administrator=True)
+async def disable_xp(interaction: discord.Interaction, channel: discord.TextChannel):
+    """Disable XP tracking for a channel."""
+    guild_id = interaction.guild.id
+    channel_id = channel.id
+
+    # Load the settings
+    with open(SETTINGS_FILE, "r") as f:
+        settings = json.load(f)
+    guild_id_str = str(guild_id)
+
+    # Ensure the guild settings exist
+    if guild_id_str not in settings:
+        settings[guild_id_str] = {}
+
+    # Ensure the ignore list exists
+    if "ignore_channel" not in settings[guild_id_str]:
+        settings[guild_id_str]["ignore_channel"] = []
+
+    # Add the channel to the ignore list if it's not already there
+    if channel_id not in settings[guild_id_str]["ignore_channel"]:
+        settings[guild_id_str]["ignore_channel"].append(channel_id)
+        with open(SETTINGS_FILE, "w") as f:
+            json.dump(settings, f, indent=4)
+        await interaction.response.send_message(
+            f"Channel {channel.mention} has been disabled for XP tracking.",
+            ephemeral=True,
+        )
+    else:
+        await interaction.response.send_message(
+            f"Channel {channel.mention} is already disabled for XP tracking.",
+            ephemeral=True,
+        )

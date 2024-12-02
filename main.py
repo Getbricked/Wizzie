@@ -38,7 +38,7 @@ from utils.birthday import check_birthdays, update_birthdays
 from utils.leveling import increase_xp_periodically
 
 from commands.birthday import add_birthday, list_birthdays, test_birthday
-from commands.leveling import xp, leaderboard
+from commands.leveling import xp, leaderboard, disable_xp, enable_xp
 from commands.setup import app_setup
 
 
@@ -47,6 +47,8 @@ tree.add_command(add_birthday)
 tree.add_command(list_birthdays)
 tree.add_command(test_birthday)
 tree.add_command(xp)
+tree.add_command(disable_xp)
+tree.add_command(enable_xp)
 tree.add_command(leaderboard)
 
 #####################################################################################################
@@ -109,8 +111,14 @@ async def on_message(message):
     if message.guild.id not in member_last_activity:
         member_last_activity[message.guild.id] = {}
 
+    # Ensure the channel exists in the guild's activity data
+    if message.channel.id not in member_last_activity[message.guild.id]:
+        member_last_activity[message.guild.id][message.channel.id] = {}
+
     # Update the member's last activity timestamp
-    member_last_activity[message.guild.id][message.author.id] = time.time()
+    member_last_activity[message.guild.id][message.channel.id][
+        message.author.id
+    ] = time.time()
 
     # Save the updated data
     save_data(data)

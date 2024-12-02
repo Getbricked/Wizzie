@@ -68,6 +68,27 @@ def calculate_user_rank(user_id, guild_id):
 
 
 #####################################################################################################
+# Function to check ignore channels
+def check_ignore_channel(channel_id, guild_id):
+    """Check if the channel is ignored for XP."""
+    # Load the settings
+    if not os.path.exists(SETTINGS_FILE):
+        with open(SETTINGS_FILE, "w") as f:
+            json.dump({}, f)
+    with open(SETTINGS_FILE, "r") as f:
+        settings = json.load(f)
+
+    guild_settings = settings.get(str(guild_id), {})
+
+    ignore_channels = guild_settings.get("ignore_channel", [])
+
+    if str(channel_id) in ignore_channels:
+        return True
+
+    return False
+
+
+#####################################################################################################
 # Announce the user's level up in the announcement channel
 
 
@@ -83,6 +104,7 @@ async def check_level_up(user_id, guild_id, oldlevel, client):
             json.dump({}, f)
     with open(SETTINGS_FILE, "r") as f:
         settings = json.load(f)
+
     # print("Checking level up for user", user_id_str, "in guild", guild_id_str)
 
     if guild_id_str not in data or user_id_str not in data[guild_id_str]:
@@ -152,29 +174,40 @@ async def increase_xp_periodically(member_last_activity, client):
             # Process users in the guild
             for user_id, user_data in guild_data.items():
                 int_user_id = int(user_id)  # Convert to int for comparison
-                if int_user_id not in member_last_activity[int_guild_id]:
-                    # print(f"Skipping user {user_id} in guild {guild_id} (no activity)")
-                    continue
 
-                last_activity_time = member_last_activity[int_guild_id][int_user_id]
-                time_diff = time.time() - last_activity_time
+                for channel_id in member_last_activity[int_guild_id]:
+                    # Check if the channel is ignored for XP
+                    if check_ignore_channel(channel_id, guild_id):
+                        continue
 
-                # print(f"User {user_id} in guild {guild_id}: time_diff={time_diff}")
+                    if (
+                        int_user_id
+                        not in member_last_activity[int_guild_id][channel_id]
+                    ):
+                        # print(f"Skipping user {user_id} in guild {guild_id} (no activity)")
+                        continue
 
-                # If the member sent a message in the last 30 seconds
-                if time_diff > 30:
-                    # print(f"Skipping user {user_id} (inactive)")
-                    continue
-                oldlevel, _, _ = calculate_level_and_thresholds(user_data["xp"])
-                # Add random XP between 4 and 8
-                xp_to_add = random.randint(4, 8)
-                user_data["xp"] += xp_to_add
+                    last_activity_time = member_last_activity[int_guild_id][channel_id][
+                        int_user_id
+                    ]
+                    time_diff = time.time() - last_activity_time
 
-                save_data(data)
+                    # print(f"User {user_id} in guild {guild_id}: time_diff={time_diff}")
 
-                ############################################################
-                # Check if the user leveled up
-                await check_level_up(int_user_id, int_guild_id, oldlevel, client)
+                    # If the member sent a message in the last 30 seconds
+                    if time_diff > 30:
+                        # print(f"Skipping user {user_id} (inactive)")
+                        continue
+                    oldlevel, _, _ = calculate_level_and_thresholds(user_data["xp"])
+                    # Add random XP between 4 and 8
+                    xp_to_add = random.randint(4, 8)
+                    user_data["xp"] += xp_to_add
+
+                    save_data(data)
+
+                    ############################################################
+                    # Check if the user leveled up
+                    await check_level_up(int_user_id, int_guild_id, oldlevel, client)
 
         # Save the updated data back to the file
 
