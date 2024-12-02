@@ -122,13 +122,13 @@ async def check_level_up(user_id, guild_id, oldlevel, client):
 
 
 #####################################################################################################
-# Function to increase XP every 15 seconds for members who chatted
+# Function to increase XP every 30 seconds for members who chatted
 
 
 # Need to pass the `client` object for checking level up
 async def increase_xp_periodically(member_last_activity, client):
     while True:
-        await asyncio.sleep(15)  # Wait for 15 seconds
+        await asyncio.sleep(30)  # Wait for 30 seconds
 
         data = load_data()
         # Load settings
@@ -161,13 +161,13 @@ async def increase_xp_periodically(member_last_activity, client):
 
                 # print(f"User {user_id} in guild {guild_id}: time_diff={time_diff}")
 
-                # If the member sent a message in the last 15 seconds
-                if time_diff > 15:
+                # If the member sent a message in the last 30 seconds
+                if time_diff > 30:
                     # print(f"Skipping user {user_id} (inactive)")
                     continue
                 oldlevel, _, _ = calculate_level_and_thresholds(user_data["xp"])
-                # Add random XP between 5 and 10
-                xp_to_add = random.randint(5, 10)
+                # Add random XP between 4 and 8
+                xp_to_add = random.randint(4, 8)
                 user_data["xp"] += xp_to_add
 
                 save_data(data)
