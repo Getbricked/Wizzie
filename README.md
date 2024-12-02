@@ -42,6 +42,16 @@ announcement_channel: the channel where Wizzie will post level up announcement
 /test-birthday user:
 ```
 
+### Disable or Enable xp on a channel:
+
+```
+/disable-xp channel:
+```
+
+```
+/enable-xp channel:
+```
+
 ## Commands (everyone)
 
 ### XP: get user or other users xp, level info
