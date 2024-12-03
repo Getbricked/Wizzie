@@ -93,9 +93,13 @@ async def check_birthdays():
         next_update = datetime.combine(next_day, datetime.min.time())
         hours = int(((next_update - now).seconds) / 3600)
         minutes = int(((next_update - now).seconds) / 60) % 60
-        print(
-            f"{CURRENT_TIME} - Next birthday update in {hours} hours and {minutes} minutes."
-        )
+
+        # Prevent spamming the console with messages when hours and minutes are 0
+        if hours != 0 and minutes != 0:
+            print(
+                f"{CURRENT_TIME} - Next birthday update in {hours} hours and {minutes} minutes."
+            )
+
         await asyncio.sleep((next_update - now).seconds)
 
 
