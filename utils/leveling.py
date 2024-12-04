@@ -164,18 +164,21 @@ async def increase_xp_periodically(member_last_activity, client):
         for guild_id, guild_data in data.items():
             int_guild_id = int(guild_id)
 
+            # Skip the guild if the level-up system is disabled
             guild_settings = settings.get(str(guild_id), {})
             if not guild_settings.get("level", True):
                 continue  # Convert to int for comparison
 
+            # Skip if the guild has no activity data
             if int_guild_id not in member_last_activity:
                 # print(f"Skipping guild {guild_id} (no activity)")
                 continue
 
-            # Process users in the guild
+            # Process users in the guild with activity
             for user_id, user_data in guild_data.items():
                 int_user_id = int(user_id)  # Convert to int for comparison
 
+                # Skip if the user has no activity data
                 for channel_id in member_last_activity[int_guild_id]:
                     if (
                         int_user_id
@@ -184,20 +187,23 @@ async def increase_xp_periodically(member_last_activity, client):
                         # print(f"Skipping user {user_id} in guild {guild_id} (no activity)")
                         continue
 
+                    # Check if the channel is ignored for XP
+                    if check_ignore_channel(channel_id, guild_id):
+                        continue
+
+                    # Get the last activity time for the user
                     last_activity_time = member_last_activity[int_guild_id][channel_id][
                         int_user_id
                     ]
+
+                    # Calculate the time difference since the last activity
                     time_diff = time.time() - last_activity_time
 
                     # print(f"User {user_id} in guild {guild_id}: time_diff={time_diff}")
 
-                    # If the member sent a message in the last 30 seconds
+                    # Filter out users inactive more than 30 seconds
                     if time_diff > 30:
                         # print(f"Skipping user {user_id} (inactive)")
-                        continue
-
-                    # Check if the channel is ignored for XP
-                    if check_ignore_channel(channel_id, guild_id):
                         continue
 
                     oldlevel, _, _ = calculate_level_and_thresholds(user_data["xp"])
