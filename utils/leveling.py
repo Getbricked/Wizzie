@@ -82,7 +82,8 @@ def check_ignore_channel(channel_id, guild_id):
 
     ignore_channels = guild_settings.get("ignore_channel", [])
 
-    if str(channel_id) in ignore_channels:
+    if channel_id in ignore_channels:
+        # print(f"Channel {channel_id} is ignored for XP")
         return True
 
     return False
@@ -176,10 +177,6 @@ async def increase_xp_periodically(member_last_activity, client):
                 int_user_id = int(user_id)  # Convert to int for comparison
 
                 for channel_id in member_last_activity[int_guild_id]:
-                    # Check if the channel is ignored for XP
-                    if check_ignore_channel(channel_id, guild_id):
-                        continue
-
                     if (
                         int_user_id
                         not in member_last_activity[int_guild_id][channel_id]
@@ -198,6 +195,11 @@ async def increase_xp_periodically(member_last_activity, client):
                     if time_diff > 30:
                         # print(f"Skipping user {user_id} (inactive)")
                         continue
+
+                    # Check if the channel is ignored for XP
+                    if check_ignore_channel(channel_id, guild_id):
+                        continue
+
                     oldlevel, _, _ = calculate_level_and_thresholds(user_data["xp"])
                     # Add random XP between 4 and 8
                     xp_to_add = random.randint(4, 8)
