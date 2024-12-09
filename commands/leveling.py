@@ -101,13 +101,17 @@ async def leaderboard(interaction: discord.Interaction):
     for user_id_str, user_data in guild_data.items():
         # Skip users with no XP data
         xp = user_data.get("xp", 0)
+
         if xp == "Unknown":  # If XP is unknown, set it to 0
             xp = 0
 
-        level, current_threshold, next_threshold = calculate_level_and_thresholds(xp)
-        rank = calculate_user_rank(
-            int(user_id_str), guild_id
-        )  # Use the existing function to get the rank
+        rank = calculate_user_rank(int(user_id_str), guild_id)
+
+        if rank > 10:
+            continue
+
+        level, _, _ = calculate_level_and_thresholds(xp)
+
         leaderboard_data.append((user_id_str, rank, xp, level))
 
     # Sort the leaderboard by rank (ascending order)
@@ -116,7 +120,7 @@ async def leaderboard(interaction: discord.Interaction):
     # Create the embed with a black background (using Color(0x000000) for black)
     embed = discord.Embed(
         title="XP Leaderboard",
-        description="Top players in the server",
+        description="Top users in the server",
         color=discord.Color(0x000000),  # Black background
     )
 
@@ -124,30 +128,19 @@ async def leaderboard(interaction: discord.Interaction):
     for rank, (user_id_str, user_rank, xp, level) in enumerate(
         leaderboard_data, start=1
     ):
-        user = await interaction.guild.fetch_member(
-            int(user_id_str)
-        )  # Fetch user details
+        try:
+            user = await interaction.guild.fetch_member(
+                int(user_id_str)
+            )  # Fetch user details
+        except discord.NotFound:
+            continue  # Skip if user is not found in the guild
         username = user.display_name if user else "Unknown User"
-
-        # # Apply color to top 3 ranks
-        # if user_rank == 1:
-        #     color = discord.Color.red()
-        # elif user_rank == 2:
-        #     color = discord.Color.green()
-        # elif user_rank == 3:
-        #     color = discord.Color.blue()
-        # else:
-        #     color = discord.Color(0xFFFFFF)  # Default color for other ranks
 
         embed.add_field(
             name=f"**#{user_rank}** -  {username}",
             value=f"Level {level} - {xp} XP",
             inline=False,
         )
-
-        # Limit to first 10 users to avoid long messages
-        if rank >= 10:
-            break
 
     # Send the embed
     await interaction.response.send_message(embed=embed)

@@ -53,14 +53,13 @@ def calculate_user_rank(user_id, guild_id):
 
     for user_id_str, user_data in guild_data.items():
         xp = user_data.get("xp", 0)
-        level, current_threshold, next_threshold = calculate_level_and_thresholds(xp)
-        users.append((user_id_str, xp, level))
+        users.append((user_id_str, xp))
 
     # Sort users by XP (highest to lowest)
     users.sort(key=lambda x: x[1], reverse=True)
 
     # Find the rank of the specific user
-    for rank, (user_id_str, xp, level) in enumerate(users, 1):
+    for rank, (user_id_str, xp) in enumerate(users, 1):
         if user_id_str == str(user_id):
             return rank  # Return rank (1-based)
 
