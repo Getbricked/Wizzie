@@ -15,6 +15,8 @@ Wizzie is a Discord bot made from discord.py!
 
 ### Setup (keep in mind that all birthday in data_channel must have formate dd-mm)
 
+**<span style="color:red">YOU SHOULD RUN THIS COMMAND AFTER YOU INVITE WIZZIE</span>**
+
 - level_flag: default is True if False then level-up system will be disabled
 - birthday_channel: the channel that server will receive birthday announcement
 - data_channel: the channel where server can gather user's birthday data (must be format dd-mm)

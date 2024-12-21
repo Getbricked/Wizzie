@@ -95,10 +95,10 @@ async def check_birthdays():
         minutes = int(((next_update - now).seconds) / 60) % 60
 
         # Prevent spamming the console with messages when hours and minutes are 0
-        if hours != 0 and minutes != 0:
-            print(
-                f"{CURRENT_TIME} - Next birthday update in {hours} hours and {minutes} minutes."
-            )
+        # if hours != 0 and minutes != 0:
+        #     print(
+        #         f"{CURRENT_TIME} - Next birthday update in {hours} hours and {minutes} minutes."
+        #     )
 
         await asyncio.sleep((next_update - now).seconds)
 
@@ -170,6 +170,6 @@ async def update_birthdays():
     try:
         with open(DATA_FILE, "w") as f:
             json.dump(birthdays, f, indent=4)
-        print(f"{datetime.now().strftime('%H:%M')} - Updated birthdays file.")
+        # print(f"{datetime.now().strftime('%H:%M')} - Updated birthdays file.")
     except IOError as e:
         print(f"Error writing to birthdays file: {e}")
