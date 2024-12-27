@@ -138,10 +138,10 @@ async def on_ready():
     print(f"Logged in as {client.user}")
 
     # Update birthday data (from data channel)
-    update_birthdays.start()
+    update_birthdays.start(client)
 
     # Check for people birthday daily
-    client.loop.create_task(check_birthdays())
+    client.loop.create_task(check_birthdays(client))
 
     # Xp
     client.loop.create_task(increase_xp_periodically(member_last_activity, client))

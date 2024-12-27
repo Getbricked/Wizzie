@@ -9,7 +9,7 @@ from discord import app_commands
 from utils.client import setup_client
 
 # Set up the bot client
-client, tree = setup_client()
+# client, tree = setup_client()
 
 # Initialize or load birthday data
 if not os.path.exists(DATA_FILE):
@@ -56,37 +56,70 @@ def get_updated_guild_birthdays(guild_id):
 
 #####################################################################################################
 # Birthday Checker Task
-async def check_birthdays():
+async def check_birthdays(client):
     while True:
         now = datetime.now()
         today = now.strftime("%d-%m")
+        print(f"{CURRENT_TIME} - Checking birthdays for {today}.")
 
         for guild_id, users in birthdays.items():
             guild = client.get_guild(int(guild_id))
             if not guild:
+                print(f"Guild {guild_id} not found.")
                 continue
 
             role_name = settings.get(guild_id, {}).get("birthday_role", "Birthday")
             role = discord.utils.get(guild.roles, name=role_name)
             if not role:
+                print(f"Role {role_name} not found in guild {guild_id}.")
                 continue
 
             for user_id, data in users.items():
                 user = guild.get_member(int(user_id))
                 if not user:
+                    print(f"User {user_id} not found in guild {guild_id}.")
                     continue
 
                 if data["bdate"] == today:
+                    print(f"Today is {user.name}'s birthday!")
                     if role not in user.roles:
-                        await user.add_roles(role)
+                        try:
+                            await user.add_roles(role)
+                            print(
+                                f"{CURRENT_TIME} - Birthday role assigned to {user.name}."
+                            )
+                        except discord.Forbidden:
+                            continue
+                        except discord.HTTPException as e:
+                            continue
+
                         channel_name = settings.get(guild_id, {}).get(
                             "birthday_channel", "general"
                         )
                         channel = discord.utils.get(guild.channels, name=channel_name)
                         if channel:
-                            await channel.send(f"🎉 Happy Birthday, {user.mention}! 🎂")
+                            try:
+                                await channel.send(
+                                    f"🎉 Happy Birthday, {user.mention}! 🎂"
+                                )
+                                print(
+                                    f"{CURRENT_TIME} - Birthday message sent for {user.name}."
+                                )
+                            except discord.Forbidden:
+                                continue
+                            except discord.HTTPException as e:
+                                continue
                 elif role in user.roles:
-                    await user.remove_roles(role)
+                    print(f"Removing birthday role from {user.name}.")
+                    try:
+                        await user.remove_roles(role)
+                        print(
+                            f"{CURRENT_TIME} - Birthday role removed from {user.name}."
+                        )
+                    except discord.Forbidden:
+                        continue
+                    except discord.HTTPException as e:
+                        continue
 
         # Wait until the next day
         next_day = now + timedelta(days=1)
@@ -94,11 +127,10 @@ async def check_birthdays():
         hours = int(((next_update - now).seconds) / 3600)
         minutes = int(((next_update - now).seconds) / 60) % 60
 
-        # Prevent spamming the console with messages when hours and minutes are 0
-        # if hours != 0 and minutes != 0:
-        #     print(
-        #         f"{CURRENT_TIME} - Next birthday update in {hours} hours and {minutes} minutes."
-        #     )
+        if hours != 0 or minutes != 0:
+            print(
+                f"{CURRENT_TIME} - Next birthday update in {hours} hours and {minutes} minutes."
+            )
 
         await asyncio.sleep((next_update - now).seconds)
 
@@ -106,7 +138,7 @@ async def check_birthdays():
 #####################################################################################################
 # Get birthday data from data channel
 @tasks.loop(hours=1)  # This task will run every hour
-async def update_birthdays():
+async def update_birthdays(client):
     try:
         # Load the current birthdays from the file (ensure it has the latest data)
         with open(DATA_FILE, "r") as f:
@@ -121,17 +153,17 @@ async def update_birthdays():
         data_channel_name = settings.get(guild_id, {}).get("data_channel")
 
         if not data_channel_name:
-            print(f"Guild {guild_id}: No data channel set.")
+            # print(f"Guild {guild_id}: No data channel set.")
             continue  # Skip if there's no data channel set for this guild
 
         # Fetch the data channel (where users post their birthdays)
         data_channel = discord.utils.get(guild.text_channels, name=data_channel_name)
 
         if not data_channel:
-            print(f"Guild {guild_id}: Data channel '{data_channel_name}' not found.")
+            # print(f"Guild {guild_id}: Data channel '{data_channel_name}' not found.")
             continue  # Skip if the data channel is not found
 
-        print(f"Guild {guild_id}: Reading messages from '{data_channel_name}'.")
+        # print(f"Guild {guild_id}: Reading messages from '{data_channel_name}'.")
 
         # Initialize guild data if not present
         if guild_id not in birthdays:
