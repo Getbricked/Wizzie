@@ -8,6 +8,7 @@ from utils.birthday import (
     add_or_update_birthday,
     get_updated_guild_birthdays,
     save_birthdays,
+    delete_birthday,
 )
 from utils.const import SETTINGS_FILE
 from utils.client import setup_client
@@ -55,6 +56,35 @@ async def add_birthday(
 
     await interaction.response.send_message(
         f"Added birthday for {user.name} on {bdate}!"
+    )
+
+
+# Slash Command to Remove a Birthday
+@tree.command(
+    name="remove-birthday", description="Remove a birthday for a user (Admins only)"
+)
+@app_commands.describe(user="The user to remove the birthday for")
+async def remove_birthday(interaction: discord.Interaction, user: discord.Member):
+    if not interaction.user.guild_permissions.administrator:
+        await interaction.response.send_message(
+            "You need to be an administrator to use this command.", ephemeral=True
+        )
+        return
+
+    guild_id = str(interaction.guild.id)
+    guild_birthdays = get_updated_guild_birthdays(guild_id)
+
+    if str(user.id) not in guild_birthdays:
+        await interaction.response.send_message(
+            f"No birthday found for {user.name}.", ephemeral=True
+        )
+        return
+
+    # Remove the user's birthday
+    delete_birthday(guild_id, user.id)
+
+    await interaction.response.send_message(
+        f"Removed birthday for {user.name}.", ephemeral=True
     )
 
 

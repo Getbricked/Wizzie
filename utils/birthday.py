@@ -47,6 +47,22 @@ def add_or_update_birthday(guild_id, user_id, bdate):
     }
 
 
+def delete_birthday(guild_id, user_id):
+    """Delete a birthday for a user in the given guild."""
+    guild_id = str(guild_id)
+    user_id = str(user_id)
+
+    if guild_id in birthdays and user_id in birthdays[guild_id]:
+        del birthdays[guild_id][user_id]
+        if not birthdays[
+            guild_id
+        ]:  # If no more birthdays in the guild, remove the guild entry
+            del birthdays[guild_id]
+        save_birthdays()
+        return True
+    return False
+
+
 def get_updated_guild_birthdays(guild_id):
     """Retrieve all birthdays for a specific guild."""
     with open(DATA_FILE, "r") as f:
@@ -65,19 +81,19 @@ async def check_birthdays(client):
         for guild_id, users in birthdays.items():
             guild = client.get_guild(int(guild_id))
             if not guild:
-                print(f"Guild {guild_id} not found.")
+                # print(f"Guild {guild_id} not found.")
                 continue
 
             role_name = settings.get(guild_id, {}).get("birthday_role", "Birthday")
             role = discord.utils.get(guild.roles, name=role_name)
             if not role:
-                print(f"Role {role_name} not found in guild {guild_id}.")
+                # print(f"Role {role_name} not found in guild {guild_id}.")
                 continue
 
             for user_id, data in users.items():
                 user = guild.get_member(int(user_id))
                 if not user:
-                    print(f"User {user_id} not found in guild {guild_id}.")
+                    # print(f"User {user_id} not found in guild {guild_id}.")
                     continue
 
                 if data["bdate"] == today:
@@ -110,7 +126,7 @@ async def check_birthdays(client):
                             except discord.HTTPException as e:
                                 continue
                 elif role in user.roles:
-                    print(f"Removing birthday role from {user.name}.")
+                    # print(f"Removing birthday role from {user.name}.")
                     try:
                         await user.remove_roles(role)
                         print(

@@ -37,13 +37,19 @@ client, tree = setup_client()
 from utils.birthday import check_birthdays, update_birthdays
 from utils.leveling import increase_xp_periodically
 
-from commands.birthday import add_birthday, list_birthdays, test_birthday
+from commands.birthday import (
+    add_birthday,
+    list_birthdays,
+    test_birthday,
+    remove_birthday,
+)
 from commands.leveling import xp, leaderboard, disable_xp, enable_xp
 from commands.setup import app_setup
 
 
 tree.add_command(app_setup)
 tree.add_command(add_birthday)
+tree.add_command(remove_birthday)
 tree.add_command(list_birthdays)
 tree.add_command(test_birthday)
 tree.add_command(xp)
