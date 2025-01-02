@@ -54,6 +54,20 @@ Wizzie is a Discord bot made from discord.py!
 /enable-xp channel:
 ```
 
+### Clear chat:
+
+- amount (optional): default amount is 10 if there's no input
+
+```
+/clear amount:
+```
+
+#### Basically recreate the channel (delete all messages)
+
+```
+/clear-all
+```
+
 ## Commands (everyone)
 
 ### XP: get user or other users xp, level info

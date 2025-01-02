@@ -45,8 +45,10 @@ from commands.birthday import (
 )
 from commands.leveling import xp, leaderboard, disable_xp, enable_xp
 from commands.setup import app_setup
+from commands.clear import clear, clear_all
 
-
+tree.add_command(clear)
+tree.add_command(clear_all)
 tree.add_command(app_setup)
 tree.add_command(add_birthday)
 tree.add_command(remove_birthday)
