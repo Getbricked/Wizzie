@@ -177,16 +177,26 @@ async def list_birthdays(interaction: discord.Interaction):
         )
         return
 
+    # Filter and sort the birthdays by day and month
+    sorted_birthdays = sorted(
+        (
+            (user_id, data)
+            for user_id, data in guild_birthdays.items()
+            if data.get("bdate") not in ("Unknown", None)
+        ),
+        key=lambda x: (
+            int(x[1]["bdate"].split("-")[1]),
+            int(x[1]["bdate"].split("-")[0]),
+        ),
+    )
+
     # Format the list of birthdays
-    response = "**🎂 Birthdays in this server:**\n"
-    for user_id, data in guild_birthdays.items():
-
-        # Skip users with bdate as "Unknown" or None
-        if data.get("bdate") in ("Unknown", None):
-            continue
-
+    response = "**🎂 Birthdays in this server (sorted by date):**\n"
+    for user_id, data in sorted_birthdays:
         member = interaction.guild.get_member(int(user_id))
         member_name = member.name if member else "Unknown Member"
+        if member_name == "Unknown Member":
+            continue
         response += f"- {member_name}: {data['bdate']}\n"
 
     # Send the response
