@@ -9,6 +9,7 @@ from utils.birthday import (
     get_updated_guild_birthdays,
     save_birthdays,
     delete_birthday,
+    get_zodiac,
 )
 from utils.const import SETTINGS_FILE
 from utils.client import setup_client
@@ -191,13 +192,22 @@ async def list_birthdays(interaction: discord.Interaction):
     )
 
     # Format the list of birthdays
-    response = "**🎂 Birthdays in this server (sorted by date):**\n"
+    # Format the list of birthdays
+    response = "**🎂 Birthdays in this server:**\n```"
+    # response += f"{'Name'.ljust(15)}{'Birthday'.ljust(10)}{'Zodiac'}\n"
+    # response += f"{'-' * 15}{'-' * 10}{'-' * 7}\n"
+
     for user_id, data in sorted_birthdays:
+        day, month = map(int, data["bdate"].split("-"))
+        zodiac_icon = get_zodiac(day, month)
         member = interaction.guild.get_member(int(user_id))
         member_name = member.name if member else "Unknown Member"
         if member_name == "Unknown Member":
             continue
-        response += f"- {member_name}: {data['bdate']}\n"
+        # Use fixed-width format for alignment
+        response += (
+            f"{member_name[:15].ljust(15)}{data['bdate'].ljust(10)}{zodiac_icon}\n"
+        )
 
-    # Send the response
+    response += "```"  # Close code block for monospace font
     await interaction.response.send_message(response, ephemeral=False)

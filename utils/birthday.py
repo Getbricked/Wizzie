@@ -221,3 +221,24 @@ async def update_birthdays(client):
         # print(f"{datetime.now().strftime('%H:%M')} - Updated birthdays file.")
     except IOError as e:
         print(f"Error writing to birthdays file: {e}")
+
+
+def get_zodiac(day: int, month: int) -> str:
+    zodiac_signs = [
+        ("♑   Capricorn", (1, 20)),
+        ("♒   Aquarius", (2, 19)),
+        ("♓   Pisces", (3, 20)),
+        ("♈   Aries", (4, 20)),
+        ("♉   Taurus", (5, 20)),
+        ("♊   Gemini", (6, 20)),
+        ("♋   Cancer", (7, 22)),
+        ("♌   Leo", (8, 22)),
+        ("♍   Virgo", (9, 22)),
+        ("♎   Libra", (10, 22)),
+        ("♏   Scorpio", (11, 21)),
+        ("♐   Sagittarius", (12, 21)),
+        ("♑   Capricorn", (12, 31)),
+    ]
+    for sign, (m, d) in zodiac_signs:
+        if (month < m) or (month == m and day <= d):
+            return sign
