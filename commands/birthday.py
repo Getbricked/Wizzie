@@ -52,6 +52,14 @@ async def add_birthday(
         return
 
     guild_id = str(interaction.guild.id)
+    day, month = map(int, bdate.split("-"))
+
+    if day < 10:
+        day = f"0{day}"
+    if month < 10:
+        month = f"0{month}"
+    bdate = f"{day}-{month}"
+
     add_or_update_birthday(guild_id, user.id, bdate)
     save_birthdays()
 
@@ -199,7 +207,15 @@ async def list_birthdays(interaction: discord.Interaction):
 
     for user_id, data in sorted_birthdays:
         day, month = map(int, data["bdate"].split("-"))
-        zodiac_icon = get_zodiac(day, month)
+
+        if day < 10:
+            day = f"0{day}"
+        if month < 10:
+            month = f"0{month}"
+
+        data["bdate"] = f"{day}-{month}"
+
+        zodiac_icon = get_zodiac(int(day), int(month))
         member = interaction.guild.get_member(int(user_id))
         member_name = member.name if member else "Unknown Member"
         if member_name == "Unknown Member":
