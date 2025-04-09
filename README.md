@@ -1,6 +1,8 @@
 # Wizzie Discord Bot
 
-![](<Wizard + background.gif>) ![](holywater.gif)
+<p align="center">
+  <img src="Snowy-Wizzie.gif" alt="">
+</p>
 
 ## Invite link - [Wizzie](https://discord.com/oauth2/authorize?client_id=1171940876382130206&permissions=8&integration_type=0&scope=bot)
 
