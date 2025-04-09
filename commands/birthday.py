@@ -147,7 +147,9 @@ async def test_birthday(interaction: discord.Interaction, user: discord.Member):
     channel = discord.utils.get(guild.channels, name=channel_name)
 
     if channel:
-        await channel.send(f"🎉 (Test) Happy Birthday, {user.mention}! 🎂")
+        await channel.send(
+            f"🎉 (Test) Happy Birthday, {user.mention}! 🎂 https://tenor.com/view/happy-birthday-bon-anniversaire-birthday-cake-birthday-birthday-fiesta-gif-8599251704042047456"
+        )
     else:
         await interaction.followup.send(
             "No birthday announcement channel is set. Please configure it using `/setup`.",

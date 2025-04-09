@@ -116,7 +116,7 @@ async def check_birthdays(client):
                         if channel:
                             try:
                                 await channel.send(
-                                    f"🎉 Happy Birthday, {user.mention}! 🎂"
+                                    f"🎉 Happy Birthday, {user.mention}! 🎂\n https://tenor.com/view/happy-birthday-bon-anniversaire-birthday-cake-birthday-birthday-fiesta-gif-8599251704042047456"
                                 )
                                 print(
                                     f"{CURRENT_TIME} - Birthday message sent for {user.name}."

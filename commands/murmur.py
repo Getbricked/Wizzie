@@ -45,7 +45,7 @@ async def murmur(
 
 
 @murmur.error
-async def whisper_error(
+async def murmur_error(
     interaction: discord.Interaction, error: app_commands.AppCommandError
 ):
     """Handle errors for the whisper command."""
