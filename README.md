@@ -1,6 +1,5 @@
 # Wizzie Discord Bot
 
-Wizzie is a Discord bot made from discord.py!
 ![](<Wizard + background.gif>)
 
 ## Invite link - [Wizzie](https://discord.com/oauth2/authorize?client_id=1171940876382130206&permissions=8&integration_type=0&scope=bot)
