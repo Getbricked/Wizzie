@@ -247,15 +247,9 @@ def generate_xp_card(
     draw = ImageDraw.Draw(card)
 
     # Load fonts (replace with the path to your fonts)
-    font_large = ImageFont.truetype(
-        "/usr/share/fonts/truetype/msttcorefonts/Arial.ttf", 24
-    )
-    font_large_bold = ImageFont.truetype(
-        "/usr/share/fonts/truetype/msttcorefonts/Arial_Bold.ttf", 24
-    )  # Bold version
-    font_small = ImageFont.truetype(
-        "/usr/share/fonts/truetype/msttcorefonts/Arial.ttf", 18
-    )
+    font_large = ImageFont.truetype("Arial.ttf", 24)
+    font_large_bold = ImageFont.truetype("Arial_Bold.ttf", 24)  # Bold version
+    font_small = ImageFont.truetype("Arial.ttf", 18)
 
     # Define shadow offset
     shadow_offset = (3, 3)  # Offset for the shadow
