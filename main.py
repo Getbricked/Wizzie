@@ -35,6 +35,7 @@ client, tree = setup_client()
 
 from utils.birthday import check_birthdays, update_birthdays
 from utils.leveling import increase_xp_periodically
+from utils.data_backup import start_daily_backup
 
 from commands.birthday import (
     add_birthday,
@@ -156,6 +157,9 @@ async def on_ready():
 
     # Xp
     client.loop.create_task(increase_xp_periodically(member_last_activity, client))
+
+    # Start daily backup task
+    client.loop.create_task(start_daily_backup())
 
 
 client.run(TOKEN)

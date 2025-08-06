@@ -1,5 +1,7 @@
 # Hidden Files
 *.json
+!db_config.json.example
+!tokens.json.example
 xp_card.png
 
 
