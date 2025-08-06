@@ -160,30 +160,28 @@ async def increase_xp_periodically(member_last_activity, client):
         with open(SETTINGS_FILE, "r") as f:
             settings = json.load(f)
 
+        # Create a copy of member_last_activity to avoid modifying while iterating
+        activity_snapshot = member_last_activity.copy()
+
         for guild_id, guild_data in data.items():
             int_guild_id = int(guild_id)
 
             # Skip the guild if the level-up system is disabled
             guild_settings = settings.get(str(guild_id), {})
             if not guild_settings.get("level", True):
-                continue  # Convert to int for comparison
+                continue
 
             # Skip if the guild has no activity data
-            if int_guild_id not in member_last_activity:
-                # print(f"Skipping guild {guild_id} (no activity)")
+            if int_guild_id not in activity_snapshot:
                 continue
 
             # Process users in the guild with activity
             for user_id, user_data in guild_data.items():
-                int_user_id = int(user_id)  # Convert to int for comparison
+                int_user_id = int(user_id)
 
                 # Skip if the user has no activity data
-                for channel_id in member_last_activity[int_guild_id]:
-                    if (
-                        int_user_id
-                        not in member_last_activity[int_guild_id][channel_id]
-                    ):
-                        # print(f"Skipping user {user_id} in guild {guild_id} (no activity)")
+                for channel_id in activity_snapshot.get(int_guild_id, {}):
+                    if int_user_id not in activity_snapshot[int_guild_id].get(channel_id, {}):
                         continue
 
                     # Check if the channel is ignored for XP
@@ -191,18 +189,13 @@ async def increase_xp_periodically(member_last_activity, client):
                         continue
 
                     # Get the last activity time for the user
-                    last_activity_time = member_last_activity[int_guild_id][channel_id][
-                        int_user_id
-                    ]
+                    last_activity_time = activity_snapshot[int_guild_id][channel_id][int_user_id]
 
                     # Calculate the time difference since the last activity
                     time_diff = time.time() - last_activity_time
 
-                    # print(f"User {user_id} in guild {guild_id}: time_diff={time_diff}")
-
                     # Filter out users inactive more than 30 seconds
                     if time_diff > 30:
-                        # print(f"Skipping user {user_id} (inactive)")
                         continue
 
                     oldlevel, _, _ = calculate_level_and_thresholds(user_data["xp"])
@@ -212,13 +205,10 @@ async def increase_xp_periodically(member_last_activity, client):
 
                     save_data(data)
 
-                    ############################################################
                     # Check if the user leveled up
                     await check_level_up(int_user_id, int_guild_id, oldlevel, client)
 
-        # Save the updated data back to the file
-
-        # Clear the activity tracking dictionary
+        # Clear the activity tracking dictionary after iteration
         member_last_activity.clear()
 
 
@@ -247,9 +237,15 @@ def generate_xp_card(
     draw = ImageDraw.Draw(card)
 
     # Load fonts (replace with the path to your fonts)
-    font_large = ImageFont.truetype("Arial.ttf", 24)
-    font_large_bold = ImageFont.truetype("Arial_Bold.ttf", 24)  # Bold version
-    font_small = ImageFont.truetype("Arial.ttf", 18)
+    font_large = ImageFont.truetype(
+        "Arial.ttf", 24
+    )
+    font_large_bold = ImageFont.truetype(
+        "Arial_Bold.ttf", 24
+    )  # Bold version
+    font_small = ImageFont.truetype(
+        "Arial.ttf", 18
+    )
 
     # Define shadow offset
     shadow_offset = (3, 3)  # Offset for the shadow

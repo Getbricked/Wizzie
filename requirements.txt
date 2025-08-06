@@ -1,5 +1,7 @@
 discord.py
 python-dotenv
-asyncio
+aiohttp
+aiofiles
+aiomysql
 pillow
 requests

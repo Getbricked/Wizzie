@@ -72,7 +72,21 @@ def get_updated_guild_birthdays(guild_id):
 
 #####################################################################################################
 # Birthday Checker Task
+# Global variable to track the running task
+_running_birthday_task = None
+
+
 async def check_birthdays(client):
+    global _running_birthday_task
+
+    # Prevent duplicate tasks
+    if _running_birthday_task and not _running_birthday_task.done():
+        print(f"{CURRENT_TIME} - Birthday task already running, skipping new instance.")
+        return
+
+    # Track the current task
+    _running_birthday_task = asyncio.current_task()
+
     while True:
         now = datetime.now()
         today = now.strftime("%d-%m")

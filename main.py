@@ -5,13 +5,12 @@ import json
 import os
 from dotenv import load_dotenv
 import time
-
+from getpass import getpass
 
 #####################################################################################################
 # Load environment variables
 # Import constants
 from utils.const import SETTINGS_FILE, TOKEN
-
 
 load_dotenv()
 
@@ -58,10 +57,10 @@ tree.add_command(add_birthday)
 tree.add_command(remove_birthday)
 tree.add_command(list_birthdays)
 tree.add_command(test_birthday)
-# tree.add_command(xp)
-# tree.add_command(disable_xp)
-# tree.add_command(enable_xp)
-# tree.add_command(leaderboard)
+tree.add_command(xp)
+tree.add_command(disable_xp)
+tree.add_command(enable_xp)
+tree.add_command(leaderboard)
 
 #####################################################################################################
 ### Bot events
@@ -150,13 +149,13 @@ async def on_ready():
     print(f"Logged in as {client.user}")
 
     # Update birthday data (from data channel)
-    update_birthdays.start(client)
+    # update_birthdays.start(client)
 
     # Check for people birthday daily
     client.loop.create_task(check_birthdays(client))
 
     # Xp
-    # client.loop.create_task(increase_xp_periodically(member_last_activity, client))
+    client.loop.create_task(increase_xp_periodically(member_last_activity, client))
 
 
 client.run(TOKEN)
