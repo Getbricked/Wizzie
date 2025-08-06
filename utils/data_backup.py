@@ -3,6 +3,7 @@ import aiomysql
 import asyncio
 from datetime import datetime
 import os
+import warnings
 from discord.ext import tasks
 
 # Import database configuration from constants
@@ -32,35 +33,48 @@ async def create_tables():
     try:
         cursor = await connection.cursor()
 
-        # Create settings table
-        await cursor.execute(
-            """
-        CREATE TABLE IF NOT EXISTS settings (
-            guild_id VARCHAR(50) PRIMARY KEY,
-            birthday_role VARCHAR(100),
-            birthday_channel VARCHAR(100),
-            data_channel VARCHAR(100),
-            announcement_channel VARCHAR(100),
-            level BOOLEAN
-        )
-        """
-        )
+        # Check if tables exist first to avoid warnings
+        await cursor.execute("SHOW TABLES LIKE 'settings'")
+        settings_exists = await cursor.fetchone()
 
-        # Create user_data table
-        await cursor.execute(
+        await cursor.execute("SHOW TABLES LIKE 'user_data'")
+        user_data_exists = await cursor.fetchone()
+
+        # Only create tables if they don't exist
+        if not settings_exists:
+            await cursor.execute(
+                """
+            CREATE TABLE settings (
+                guild_id VARCHAR(50) PRIMARY KEY,
+                birthday_role VARCHAR(100),
+                birthday_channel VARCHAR(100),
+                data_channel VARCHAR(100),
+                announcement_channel VARCHAR(100),
+                level BOOLEAN
+            )
             """
-        CREATE TABLE IF NOT EXISTS user_data (
-            guild_id VARCHAR(50),
-            user_id VARCHAR(50),
-            bdate VARCHAR(10),
-            xp INT,
-            PRIMARY KEY (guild_id, user_id)
-        )
-        """
-        )
+            )
+            print("Settings table created.")
+
+        if not user_data_exists:
+            await cursor.execute(
+                """
+            CREATE TABLE user_data (
+                guild_id VARCHAR(50),
+                user_id VARCHAR(50),
+                bdate VARCHAR(10),
+                xp INT,
+                PRIMARY KEY (guild_id, user_id)
+            )
+            """
+            )
+            print("User data table created.")
 
         await connection.commit()
-        print("Database tables created successfully.")
+        if settings_exists and user_data_exists:
+            print("Database tables already exist.")
+        else:
+            print("Database tables created successfully.")
         return True
 
     except Exception as e:
