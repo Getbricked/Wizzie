@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 from dataclasses import dataclass
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 
 import discord
 
@@ -35,6 +35,13 @@ YTDLP_OPTIONS_SINGLE = {
 YTDLP_OPTIONS_PLAYLIST = {
     **YTDLP_OPTIONS_SINGLE,
     "noplaylist": False,
+}
+
+YTDLP_OPTIONS_PLAYLIST_FLAT = {
+    **YTDLP_OPTIONS_SINGLE,
+    "noplaylist": False,
+    # Much faster: returns entries without resolving each into stream URLs.
+    "extract_flat": "in_playlist",
 }
 
 FFMPEG_OPTIONS = {
@@ -249,6 +256,80 @@ async def resolve_tracks(
     # Single item
     track = await resolve_track(query_or_url, requested_by)
     return [track]
+
+
+async def extract_playlist_entry_urls(
+    query_or_url: str,
+    max_tracks: int = 50,
+) -> Tuple[bool, List[str], Optional[str]]:
+    """Fast path to detect playlists and extract per-entry URLs.
+
+    Returns (is_playlist, entry_urls, playlist_title).
+    For non-playlists, returns (False, [], None).
+    """
+
+    _require_yt_dlp()
+
+    def _extract_flat() -> dict:
+        with yt_dlp.YoutubeDL(YTDLP_OPTIONS_PLAYLIST_FLAT) as ydl:  # type: ignore[attr-defined]
+            return ydl.extract_info(query_or_url, download=False)
+
+    info = await asyncio.to_thread(_extract_flat)
+    if not isinstance(info, dict):
+        return False, [], None
+
+    entries = info.get("entries")
+    if not entries:
+        return False, [], None
+
+    is_playlist = info.get("_type") == "playlist"
+    title = info.get("title") if is_playlist else None
+
+    urls: List[str] = []
+    for entry in entries:
+        if not isinstance(entry, dict):
+            continue
+        entry_url = (
+            entry.get("url") or entry.get("webpage_url") or entry.get("original_url")
+        )
+        if not entry_url:
+            continue
+        # For flat extraction, YouTube entries often look like "VIDEO_ID"; prefer full URL if available.
+        if isinstance(entry_url, str) and entry_url.startswith("http"):
+            urls.append(entry_url)
+        else:
+            # Best-effort YouTube reconstruction
+            urls.append(f"https://www.youtube.com/watch?v={entry_url}")
+        if max_tracks and len(urls) >= max_tracks:
+            break
+
+    if not is_playlist:
+        # Probably a search result list; treat as non-playlist.
+        return False, [], None
+
+    return True, urls, str(title) if title else None
+
+
+async def resolve_tracks_concurrently(
+    urls: List[str],
+    requested_by: discord.abc.User,
+    concurrency: int = 6,
+) -> List[Track]:
+    """Resolve multiple URLs concurrently into streamable Tracks."""
+    if not urls:
+        return []
+
+    semaphore = asyncio.Semaphore(max(1, int(concurrency)))
+
+    async def _worker(url: str) -> Optional[Track]:
+        async with semaphore:
+            try:
+                return await resolve_track(url, requested_by)
+            except Exception:
+                return None
+
+    results = await asyncio.gather(*(_worker(u) for u in urls))
+    return [t for t in results if t is not None]
 
 
 def format_duration(seconds: Optional[int]) -> str:

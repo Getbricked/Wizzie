@@ -2,7 +2,13 @@ import discord
 from discord import app_commands
 
 from utils.client import setup_client
-from utils.music import format_duration, get_guild_state, resolve_tracks
+from utils.music import (
+    extract_playlist_entry_urls,
+    format_duration,
+    get_guild_state,
+    resolve_track,
+    resolve_tracks_concurrently,
+)
 
 client, tree = setup_client()
 
@@ -59,27 +65,57 @@ async def play(interaction: discord.Interaction, query: str):
     state = get_guild_state(interaction.guild)
     await state.connect(channel)
 
+    # Fast path: playlists
     try:
-        tracks = await resolve_tracks(query, interaction.user, max_tracks=50)
+        is_playlist, entry_urls, playlist_title = await extract_playlist_entry_urls(
+            query, max_tracks=50
+        )
+    except Exception:
+        is_playlist, entry_urls, playlist_title = False, [], None
+
+    if is_playlist and entry_urls:
+        try:
+            first_track = await resolve_track(entry_urls[0], interaction.user)
+        except Exception as e:
+            await interaction.followup.send(f"Could not load that playlist: {e}")
+            return
+
+        await state.enqueue(first_track)
+        await state.play_next()
+
+        remaining_urls = entry_urls[1:]
+        title_part = f"**{playlist_title}**" if playlist_title else "playlist"
+        await interaction.followup.send(
+            f"Queued {title_part}: **1**/{len(entry_urls)} loaded. "
+            f"Loading remaining **{len(remaining_urls)}** in background (cap 50)."
+        )
+
+        async def _load_rest() -> None:
+            tracks = await resolve_tracks_concurrently(
+                remaining_urls,
+                interaction.user,
+                concurrency=6,
+            )
+            for t in tracks:
+                await state.enqueue(t)
+
+        interaction.client.loop.create_task(_load_rest())
+        return
+
+    # Single track / search
+    try:
+        track = await resolve_track(query, interaction.user)
     except Exception as e:
         await interaction.followup.send(f"Could not load that track: {e}")
         return
 
-    for track in tracks:
-        await state.enqueue(track)
+    await state.enqueue(track)
     await state.play_next()
 
-    if len(tracks) == 1:
-        t = tracks[0]
-        dur = format_duration(t.duration)
-        await interaction.followup.send(
-            f"Queued: **{t.title}** (`{dur}`)\n{t.webpage_url}"
-        )
-    else:
-        first = tracks[0]
-        await interaction.followup.send(
-            f"Queued playlist: **{len(tracks)}** tracks.\nStarting with: **{first.title}**"
-        )
+    dur = format_duration(track.duration)
+    await interaction.followup.send(
+        f"Queued: **{track.title}** (`{dur}`)\n{track.webpage_url}"
+    )
 
 
 @tree.command(name="nowplaying", description="Show the currently playing track")
