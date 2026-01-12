@@ -48,20 +48,45 @@ from commands.setup import app_setup
 from commands.clear import clear, clear_all
 from commands.whisper import whisper
 from commands.murmur import murmur
+from commands.music import (
+    join,
+    play,
+    nowplaying,
+    queue,
+    pause,
+    resume,
+    skip,
+    stop,
+    leave,
+)
+
+tree.add_command(join)
+tree.add_command(play)
+tree.add_command(nowplaying)
+tree.add_command(queue)
+tree.add_command(pause)
+tree.add_command(resume)
+tree.add_command(skip)
+tree.add_command(stop)
+tree.add_command(leave)
 
 tree.add_command(whisper)
 tree.add_command(murmur)
+
 tree.add_command(clear)
 tree.add_command(clear_all)
+
 tree.add_command(app_setup)
+
 tree.add_command(add_birthday)
 tree.add_command(remove_birthday)
 tree.add_command(list_birthdays)
 tree.add_command(test_birthday)
-tree.add_command(xp)
-tree.add_command(disable_xp)
-tree.add_command(enable_xp)
-tree.add_command(leaderboard)
+
+# tree.add_command(xp)
+# tree.add_command(disable_xp)
+# tree.add_command(enable_xp)
+# tree.add_command(leaderboard)
 
 #####################################################################################################
 ### Bot events
@@ -156,7 +181,7 @@ async def on_ready():
     client.loop.create_task(check_birthdays(client))
 
     # Xp
-    client.loop.create_task(increase_xp_periodically(member_last_activity, client))
+    # client.loop.create_task(increase_xp_periodically(member_last_activity, client))
 
     # Start daily backup task
     client.loop.create_task(start_daily_backup())

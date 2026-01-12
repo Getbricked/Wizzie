@@ -5,3 +5,5 @@ aiofiles
 aiomysql
 pillow
 requests
+yt-dlp
+PyNaCl
