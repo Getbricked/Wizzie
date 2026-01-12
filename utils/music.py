@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 from dataclasses import dataclass
-from typing import Dict, Optional
+from typing import Dict, List, Optional
 
 import discord
 
@@ -23,13 +23,18 @@ class Track:
     requested_by_id: int
 
 
-YTDLP_OPTIONS = {
+YTDLP_OPTIONS_SINGLE = {
     "format": "bestaudio/best",
     "quiet": True,
     "no_warnings": True,
     "noplaylist": True,
     "default_search": "ytsearch",
     "source_address": "0.0.0.0",
+}
+
+YTDLP_OPTIONS_PLAYLIST = {
+    **YTDLP_OPTIONS_SINGLE,
+    "noplaylist": False,
 }
 
 FFMPEG_OPTIONS = {
@@ -149,7 +154,7 @@ async def resolve_track(query_or_url: str, requested_by: discord.abc.User) -> Tr
     _require_yt_dlp()
 
     def _extract() -> dict:
-        with yt_dlp.YoutubeDL(YTDLP_OPTIONS) as ydl:  # type: ignore[attr-defined]
+        with yt_dlp.YoutubeDL(YTDLP_OPTIONS_SINGLE) as ydl:  # type: ignore[attr-defined]
             return ydl.extract_info(query_or_url, download=False)
 
     info = await asyncio.to_thread(_extract)
@@ -179,6 +184,71 @@ async def resolve_track(query_or_url: str, requested_by: discord.abc.User) -> Tr
         duration=int(duration) if isinstance(duration, (int, float)) else None,
         requested_by_id=requested_by.id,
     )
+
+
+async def resolve_tracks(
+    query_or_url: str,
+    requested_by: discord.abc.User,
+    max_tracks: int = 50,
+) -> List[Track]:
+    """Resolve a query/URL into one or more playable tracks.
+
+    - If a playlist is provided, this returns all entries as individual Tracks.
+    - If a normal URL or search term is provided, this returns a single-element list.
+    """
+
+    _require_yt_dlp()
+
+    def _extract_any() -> dict:
+        with yt_dlp.YoutubeDL(YTDLP_OPTIONS_PLAYLIST) as ydl:  # type: ignore[attr-defined]
+            return ydl.extract_info(query_or_url, download=False)
+
+    info = await asyncio.to_thread(_extract_any)
+
+    if not isinstance(info, dict):
+        raise ValueError("Failed to extract media info")
+
+    entries = info.get("entries")
+    if entries:
+        # Playlist/search. For search, yt-dlp returns entries too; in that case we only want the first.
+        if info.get("_type") == "playlist" or info.get("extractor_key") in {
+            "YoutubeTab",
+            "YoutubePlaylist",
+        }:
+            raw_entries = [e for e in entries if isinstance(e, dict)]
+        else:
+            raw_entries = [
+                next((e for e in entries if isinstance(e, dict) and e), None)
+            ]
+            raw_entries = [e for e in raw_entries if e]
+
+        if max_tracks is not None and max_tracks > 0:
+            raw_entries = raw_entries[:max_tracks]
+
+        tracks: List[Track] = []
+        for entry in raw_entries:
+            # Many playlist entries don't include a direct stream URL. Re-extract each entry.
+            entry_url = (
+                entry.get("webpage_url")
+                or entry.get("original_url")
+                or entry.get("url")
+            )
+            if not entry_url:
+                continue
+            try:
+                track = await resolve_track(str(entry_url), requested_by)
+                tracks.append(track)
+            except Exception:
+                # Skip broken/unavailable entries
+                continue
+
+        if not tracks:
+            raise ValueError("No playable tracks found in playlist")
+        return tracks
+
+    # Single item
+    track = await resolve_track(query_or_url, requested_by)
+    return [track]
 
 
 def format_duration(seconds: Optional[int]) -> str:
