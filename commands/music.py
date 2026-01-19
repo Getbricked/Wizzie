@@ -269,3 +269,26 @@ async def leave(interaction: discord.Interaction):
     state = get_guild_state(interaction.guild)
     await state.disconnect()
     await interaction.response.send_message("Disconnected.", ephemeral=True)
+
+
+@tree.command(name="autoplay", description="Enable or disable autoplay mode")
+@app_commands.describe(enabled="True to enable autoplay, False to disable")
+async def autoplay(interaction: discord.Interaction, enabled: bool):
+    if interaction.guild is None:
+        await interaction.response.send_message(
+            "This only works in a server.", ephemeral=True
+        )
+        return
+
+    state = get_guild_state(interaction.guild)
+    state.set_autoplay(enabled)
+
+    if enabled:
+        await interaction.response.send_message(
+            "🔁 Autoplay **enabled**. The bot will automatically play related tracks when the queue is empty.",
+            ephemeral=True,
+        )
+    else:
+        await interaction.response.send_message(
+            "⏹️ Autoplay **disabled**.", ephemeral=True
+        )

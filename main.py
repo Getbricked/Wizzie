@@ -58,6 +58,7 @@ from commands.music import (
     skip,
     stop,
     leave,
+    autoplay,
 )
 
 tree.add_command(join)
@@ -69,6 +70,7 @@ tree.add_command(resume)
 tree.add_command(skip)
 tree.add_command(stop)
 tree.add_command(leave)
+tree.add_command(autoplay)
 
 tree.add_command(whisper)
 tree.add_command(murmur)
