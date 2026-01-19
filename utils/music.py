@@ -155,8 +155,9 @@ class GuildMusicState:
             self.current = track
 
             # Use cached file if available, otherwise stream
+            # Use FFmpegPCMAudio for both to support volume control
             if track.cached_file and os.path.exists(track.cached_file):
-                source = discord.FFmpegOpusAudio(
+                source = discord.FFmpegPCMAudio(
                     track.cached_file, **FFMPEG_OPTIONS_CACHED
                 )
             else:
