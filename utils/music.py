@@ -205,8 +205,22 @@ class GuildMusicState:
         try:
             if track.video_id:
                 cached_path = await download_track(track.video_id)
-                # Update track in queue (note: this is a best-effort update)
-                # The track is immutable, but we'll have the cached file ready
+                if cached_path:
+                    # Create a new track with the cached file path
+                    # Find and replace in queue
+                    queue_list = list(self.queue._queue)
+                    for i, queued_track in enumerate(queue_list):
+                        if queued_track.video_id == track.video_id:
+                            from dataclasses import replace
+
+                            queue_list[i] = replace(
+                                queued_track, cached_file=cached_path
+                            )
+                            break
+                    # Rebuild the queue
+                    self.queue._queue.clear()
+                    for t in queue_list:
+                        self.queue._queue.append(t)
         except Exception:
             # Preload failures are silent
             pass
@@ -382,7 +396,7 @@ async def download_track(video_id: str) -> Optional[str]:
 
 
 async def resolve_track(
-    query_or_url: str, requested_by: discord.abc.User, download: bool = True
+    query_or_url: str, requested_by: discord.abc.User, download: bool = False
 ) -> Track:
     _require_yt_dlp()
 
@@ -431,7 +445,7 @@ async def resolve_tracks(
     query_or_url: str,
     requested_by: discord.abc.User,
     max_tracks: int = 50,
-    download: bool = True,
+    download: bool = False,
 ) -> List[Track]:
     """Resolve a query/URL into one or more playable tracks.
 
@@ -551,7 +565,7 @@ async def resolve_tracks_concurrently(
     urls: List[str],
     requested_by: discord.abc.User,
     concurrency: int = 6,
-    download: bool = True,  # Default False for background loading
+    download: bool = False,
 ) -> List[Track]:
     """Resolve multiple URLs concurrently into streamable Tracks."""
     if not urls:
