@@ -75,15 +75,15 @@ tree.add_command(autoplay)
 tree.add_command(whisper)
 tree.add_command(murmur)
 
-tree.add_command(clear)
-tree.add_command(clear_all)
+# tree.add_command(clear)
+# tree.add_command(clear_all)
 
-tree.add_command(app_setup)
+# tree.add_command(app_setup)
 
-tree.add_command(add_birthday)
-tree.add_command(remove_birthday)
-tree.add_command(list_birthdays)
-tree.add_command(test_birthday)
+# tree.add_command(add_birthday)
+# tree.add_command(remove_birthday)
+# tree.add_command(list_birthdays)
+# tree.add_command(test_birthday)
 
 # tree.add_command(xp)
 # tree.add_command(disable_xp)
@@ -97,70 +97,70 @@ from utils.data import load_data, save_data
 
 
 # On member join event: add user entry to data.json
-@client.event
-async def on_member_join(member):
-    data = load_data()
-    guild_id = str(member.guild.id)
-    user_id = str(member.id)
+# @client.event
+# async def on_member_join(member):
+#     data = load_data()
+#     guild_id = str(member.guild.id)
+#     user_id = str(member.id)
 
-    # Ensure the guild entry exists
-    if guild_id not in data:
-        data[guild_id] = {}
+#     # Ensure the guild entry exists
+#     if guild_id not in data:
+#         data[guild_id] = {}
 
-    # Add the new user entry with default values
-    if user_id not in data[guild_id]:
-        data[guild_id][user_id] = {"bdate": "Unknown", "xp": 0}
-        save_data(data)  # Save the updated data
-        # print(f"Added {member} to the data file.")
+#     # Add the new user entry with default values
+#     if user_id not in data[guild_id]:
+#         data[guild_id][user_id] = {"bdate": "Unknown", "xp": 0}
+#         save_data(data)  # Save the updated data
+#         # print(f"Added {member} to the data file.")
 
 
 # Events to handle message activity
 
 # Global dictionary to track when members last sent a message
-member_last_activity = {}
+# member_last_activity = {}
 
 
-@client.event
-async def on_message(message):
-    # Ignore messages from bots
-    if message.author.bot:
-        return
+# @client.event
+# async def on_message(message):
+#     # Ignore messages from bots
+#     if message.author.bot:
+#         return
 
-    # Load the existing data
-    data = load_data()
+#     # Load the existing data
+#     data = load_data()
 
-    # Ensure the guild exists in the data
-    guild_id = str(message.guild.id)
-    if guild_id not in data:
-        data[guild_id] = {}
+#     # Ensure the guild exists in the data
+#     guild_id = str(message.guild.id)
+#     if guild_id not in data:
+#         data[guild_id] = {}
 
-    # Ensure the user exists in the guild's data
-    user_id = str(message.author.id)
-    if user_id not in data[guild_id]:
-        data[guild_id][user_id] = {"bdate": "Unknown", "xp": 0}
-    else:
-        # Ensure "xp" and "bdate" are initialized
-        user_data = data[guild_id][user_id]
-        if "xp" not in user_data:
-            user_data["xp"] = 0
-        if "bdate" not in user_data:
-            user_data["bdate"] = "Unknown"
+#     # Ensure the user exists in the guild's data
+#     user_id = str(message.author.id)
+#     if user_id not in data[guild_id]:
+#         data[guild_id][user_id] = {"bdate": "Unknown", "xp": 0}
+#     else:
+#         # Ensure "xp" and "bdate" are initialized
+#         user_data = data[guild_id][user_id]
+#         if "xp" not in user_data:
+#             user_data["xp"] = 0
+#         if "bdate" not in user_data:
+#             user_data["bdate"] = "Unknown"
 
-    # Ensure the guild exists in `member_last_activity`
-    if message.guild.id not in member_last_activity:
-        member_last_activity[message.guild.id] = {}
+#     # Ensure the guild exists in `member_last_activity`
+#     if message.guild.id not in member_last_activity:
+#         member_last_activity[message.guild.id] = {}
 
-    # Ensure the channel exists in the guild's activity data
-    if message.channel.id not in member_last_activity[message.guild.id]:
-        member_last_activity[message.guild.id][message.channel.id] = {}
+#     # Ensure the channel exists in the guild's activity data
+#     if message.channel.id not in member_last_activity[message.guild.id]:
+#         member_last_activity[message.guild.id][message.channel.id] = {}
 
-    # Update the member's last activity timestamp
-    member_last_activity[message.guild.id][message.channel.id][
-        message.author.id
-    ] = time.time()
+#     # Update the member's last activity timestamp
+#     member_last_activity[message.guild.id][message.channel.id][
+#         message.author.id
+#     ] = time.time()
 
-    # Save the updated data
-    save_data(data)
+#     # Save the updated data
+#     save_data(data)
 
 
 @client.event
@@ -180,13 +180,13 @@ async def on_ready():
     # update_birthdays.start(client)
 
     # Check for people birthday daily
-    client.loop.create_task(check_birthdays(client))
+    # client.loop.create_task(check_birthdays(client))
 
     # Xp
     # client.loop.create_task(increase_xp_periodically(member_last_activity, client))
 
     # Start daily backup task
-    client.loop.create_task(start_daily_backup())
+    # client.loop.create_task(start_daily_backup())
 
 
 client.run(TOKEN)

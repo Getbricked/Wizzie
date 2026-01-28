@@ -25,12 +25,7 @@ class Track:
     duration: Optional[int]
     requested_by_id: int
     video_id: Optional[str] = None
-    cached_file: Optional[str] = None
 
-
-# Cache directory for downloaded tracks
-CACHE_DIR = Path("cache/music")
-CACHE_DIR.mkdir(parents=True, exist_ok=True)
 
 YTDLP_OPTIONS_SINGLE = {
     "format": "bestaudio[ext=webm]/bestaudio[ext=m4a]/bestaudio/best",
@@ -39,15 +34,6 @@ YTDLP_OPTIONS_SINGLE = {
     "noplaylist": True,
     "default_search": "ytsearch",
     "source_address": "0.0.0.0",
-    "outtmpl": str(CACHE_DIR / "%(id)s.%(ext)s"),
-    "keepvideo": False,
-    "postprocessors": [
-        {
-            "key": "FFmpegExtractAudio",
-            "preferredcodec": "opus",
-            "preferredquality": "128",
-        }
-    ],
 }
 
 YTDLP_OPTIONS_PLAYLIST = {
@@ -70,10 +56,6 @@ FFMPEG_OPTIONS = {
     "options": "-vn -bufsize 512k",
 }
 
-FFMPEG_OPTIONS_CACHED = {
-    "options": "-vn",
-}
-
 
 class GuildMusicState:
     def __init__(self, guild_id: int, loop: asyncio.AbstractEventLoop):
@@ -86,7 +68,6 @@ class GuildMusicState:
 
         self.volume: float = 0.5
         self._advance_lock = asyncio.Lock()
-        self._preload_task: Optional[asyncio.Task] = None
         self.autoplay_enabled: bool = False
         self._autoplay_history: List[str] = []  # Track video IDs to avoid repeats
 
@@ -154,15 +135,8 @@ class GuildMusicState:
             track = await self.queue.get()
             self.current = track
 
-            # Use cached file if available, otherwise stream
-            # Use FFmpegPCMAudio for both to support volume control
-            if track.cached_file and os.path.exists(track.cached_file):
-                source = discord.FFmpegPCMAudio(
-                    track.cached_file, **FFMPEG_OPTIONS_CACHED
-                )
-            else:
-                source = discord.FFmpegPCMAudio(track.stream_url, **FFMPEG_OPTIONS)
-
+            # Stream the track
+            source = discord.FFmpegPCMAudio(track.stream_url, **FFMPEG_OPTIONS)
             audio = discord.PCMVolumeTransformer(source, volume=self.volume)
 
             def _after(error: Optional[BaseException]) -> None:
@@ -171,9 +145,6 @@ class GuildMusicState:
 
             self.voice_client.play(audio, after=_after)
 
-            # Preload next track in background
-            self._start_preload()
-
     async def _on_track_end(self, error: Optional[BaseException]) -> None:
         if error:
             # Swallow playback errors; next play will attempt to continue
@@ -181,49 +152,6 @@ class GuildMusicState:
         if self.current is not None:
             self.queue.task_done()
         await self.play_next()
-
-    def _start_preload(self) -> None:
-        """Start preloading the next track in queue."""
-        if self._preload_task and not self._preload_task.done():
-            return
-
-        if self.queue.empty():
-            return
-
-        # Peek at next track without removing it
-        try:
-            next_track = list(self.queue._queue)[0]
-            if next_track and not next_track.cached_file:
-                self._preload_task = asyncio.create_task(
-                    self._preload_track(next_track)
-                )
-        except (IndexError, AttributeError):
-            pass
-
-    async def _preload_track(self, track: Track) -> None:
-        """Download and cache a track in the background."""
-        try:
-            if track.video_id:
-                cached_path = await download_track(track.video_id)
-                if cached_path:
-                    # Create a new track with the cached file path
-                    # Find and replace in queue
-                    queue_list = list(self.queue._queue)
-                    for i, queued_track in enumerate(queue_list):
-                        if queued_track.video_id == track.video_id:
-                            from dataclasses import replace
-
-                            queue_list[i] = replace(
-                                queued_track, cached_file=cached_path
-                            )
-                            break
-                    # Rebuild the queue
-                    self.queue._queue.clear()
-                    for t in queue_list:
-                        self.queue._queue.append(t)
-        except Exception:
-            # Preload failures are silent
-            pass
 
     def set_autoplay(self, enabled: bool) -> bool:
         """Enable or disable autoplay mode. Returns the new state."""
@@ -238,8 +166,15 @@ class GuildMusicState:
             return
 
         try:
-            # Get related tracks from YouTube
-            related_track = await get_related_track(
+            # Add current track to history BEFORE finding related tracks
+            # to avoid getting the same recommendations repeatedly
+            if self.current.video_id not in self._autoplay_history:
+                self._autoplay_history.append(self.current.video_id)
+                if len(self._autoplay_history) > 50:
+                    self._autoplay_history = self._autoplay_history[-50:]
+
+            # Get next track from YouTube's radio/automix API
+            related_track = await get_radio_track(
                 self.current.video_id,
                 exclude_ids=self._autoplay_history,
                 requested_by_id=self.current.requested_by_id,
@@ -247,10 +182,14 @@ class GuildMusicState:
 
             if related_track:
                 await self.enqueue(related_track)
-                # Keep history limited to prevent memory growth
-                self._autoplay_history.append(related_track.video_id or "")
-                if len(self._autoplay_history) > 50:
-                    self._autoplay_history = self._autoplay_history[-50:]
+                # Add the related track to history as well
+                if (
+                    related_track.video_id
+                    and related_track.video_id not in self._autoplay_history
+                ):
+                    self._autoplay_history.append(related_track.video_id)
+                    if len(self._autoplay_history) > 50:
+                        self._autoplay_history = self._autoplay_history[-50:]
         except Exception:
             # Autoplay failures are silent
             pass
@@ -276,128 +215,70 @@ def _require_yt_dlp() -> None:
         )
 
 
-async def get_related_track(
+async def get_radio_track(
     video_id: str,
     exclude_ids: List[str],
     requested_by_id: int,
 ) -> Optional[Track]:
-    """Get a related track for autoplay based on the current video."""
+    """Get next track from YouTube's radio/automix API for autoplay."""
     _require_yt_dlp()
 
-    def _extract_related() -> Optional[dict]:
+    def _extract_radio_tracks() -> List[dict]:
+        """Extract tracks from YouTube's radio playlist."""
         opts = {
             "quiet": True,
             "no_warnings": True,
-            "extract_flat": True,
-            "playlist_items": "1",
+            "extract_flat": "in_playlist",
+            "playlistend": 10,  # Get first 10 tracks from radio
         }
 
         try:
+            # Use YouTube's radio playlist format: RDAMVM{video_id}
+            radio_url = (
+                f"https://www.youtube.com/watch?v={video_id}&list=RDAMVM{video_id}"
+            )
+
             with yt_dlp.YoutubeDL(opts) as ydl:  # type: ignore[attr-defined]
-                # Get video info which includes related videos
-                info = ydl.extract_info(
-                    f"https://www.youtube.com/watch?v={video_id}", download=False
-                )
+                info = ydl.extract_info(radio_url, download=False)
 
                 if not isinstance(info, dict):
-                    return None
+                    return []
 
-                # Try to find related videos in various possible fields
-                related = []
+                # Get playlist entries
+                entries = info.get("entries", [])
+                if not entries:
+                    return []
 
-                # YouTube may provide related videos in different fields
-                if "entries" in info:
-                    related = info["entries"]
-                elif "related_videos" in info:
-                    related = info["related_videos"]
-
-                # Filter out already played tracks
-                for item in related:
-                    if not isinstance(item, dict):
-                        continue
-
-                    item_id = item.get("id") or item.get("video_id")
-                    if item_id and item_id not in exclude_ids and item_id != video_id:
-                        return item
-
-                return None
+                # Return all entries as a list
+                return [e for e in entries if isinstance(e, dict)]
         except Exception:
-            return None
+            return []
 
-    related_info = await asyncio.to_thread(_extract_related)
+    radio_tracks = await asyncio.to_thread(_extract_radio_tracks)
 
-    if not related_info:
-        # Fallback: search for similar content
+    if not radio_tracks:
+        return None
+
+    # Find first track that hasn't been played yet
+    for track_info in radio_tracks:
+        track_id = track_info.get("id") or track_info.get("url")
+
+        # Skip if no ID or already played
+        if not track_id or track_id in exclude_ids:
+            continue
+
+        # Found a new track, resolve it fully
         try:
-            with yt_dlp.YoutubeDL({"quiet": True, "no_warnings": True}) as ydl:  # type: ignore[attr-defined]
-                info = ydl.extract_info(
-                    f"https://www.youtube.com/watch?v={video_id}", download=False
-                )
-                if isinstance(info, dict):
-                    title = info.get("title", "")
-                    # Search for similar content
-                    search_query = f"ytsearch1:{title}"
-                    return await resolve_track(
-                        search_query, discord.Object(id=requested_by_id), download=True
-                    )  # type: ignore
+            url = track_info.get("url") or f"https://www.youtube.com/watch?v={track_id}"
+            return await resolve_track(url, discord.Object(id=requested_by_id))  # type: ignore
         except Exception:
-            pass
-        return None
+            # If this track fails, continue to next one
+            continue
 
-    # Extract the related video ID
-    related_id = related_info.get("id") or related_info.get("video_id")
-    if not related_id:
-        return None
-
-    # Resolve the related track
-    try:
-        url = f"https://www.youtube.com/watch?v={related_id}"
-        return await resolve_track(url, discord.Object(id=requested_by_id), download=True)  # type: ignore
-    except Exception:
-        return None
+    return None
 
 
-async def download_track(video_id: str) -> Optional[str]:
-    """Download and cache a track, returning the path to cached file."""
-    _require_yt_dlp()
-
-    # Check if already cached
-    cached_opus = CACHE_DIR / f"{video_id}.opus"
-    if cached_opus.exists():
-        return str(cached_opus)
-
-    # Also check for other formats
-    for ext in ["webm", "m4a", "mp3"]:
-        cached_file = CACHE_DIR / f"{video_id}.{ext}"
-        if cached_file.exists():
-            return str(cached_file)
-
-    # Download the track
-    def _download() -> Optional[str]:
-        opts = YTDLP_OPTIONS_SINGLE.copy()
-        opts["outtmpl"] = str(CACHE_DIR / f"{video_id}.%(ext)s")
-
-        try:
-            with yt_dlp.YoutubeDL(opts) as ydl:  # type: ignore[attr-defined]
-                ydl.download([f"https://www.youtube.com/watch?v={video_id}"])
-
-            # Check what file was created
-            if cached_opus.exists():
-                return str(cached_opus)
-            for ext in ["webm", "m4a", "mp3", "ogg"]:
-                cached_file = CACHE_DIR / f"{video_id}.{ext}"
-                if cached_file.exists():
-                    return str(cached_file)
-            return None
-        except Exception:
-            return None
-
-    return await asyncio.to_thread(_download)
-
-
-async def resolve_track(
-    query_or_url: str, requested_by: discord.abc.User, download: bool = False
-) -> Track:
+async def resolve_track(query_or_url: str, requested_by: discord.abc.User) -> Track:
     _require_yt_dlp()
 
     def _extract() -> dict:
@@ -425,11 +306,6 @@ async def resolve_track(
     if not stream_url:
         raise ValueError("Could not get stream URL from extractor")
 
-    # Try to download and cache the track
-    cached_file = None
-    if download and video_id:
-        cached_file = await download_track(str(video_id))
-
     return Track(
         title=str(title),
         stream_url=str(stream_url),
@@ -437,7 +313,6 @@ async def resolve_track(
         duration=int(duration) if isinstance(duration, (int, float)) else None,
         requested_by_id=requested_by.id,
         video_id=str(video_id) if video_id else None,
-        cached_file=cached_file,
     )
 
 
@@ -445,7 +320,6 @@ async def resolve_tracks(
     query_or_url: str,
     requested_by: discord.abc.User,
     max_tracks: int = 50,
-    download: bool = False,
 ) -> List[Track]:
     """Resolve a query/URL into one or more playable tracks.
 
@@ -492,9 +366,7 @@ async def resolve_tracks(
             if not entry_url:
                 continue
             try:
-                track = await resolve_track(
-                    str(entry_url), requested_by, download=download
-                )
+                track = await resolve_track(str(entry_url), requested_by)
                 tracks.append(track)
             except Exception:
                 # Skip broken/unavailable entries
@@ -505,7 +377,7 @@ async def resolve_tracks(
         return tracks
 
     # Single item
-    track = await resolve_track(query_or_url, requested_by, download=download)
+    track = await resolve_track(query_or_url, requested_by)
     return [track]
 
 
@@ -565,7 +437,6 @@ async def resolve_tracks_concurrently(
     urls: List[str],
     requested_by: discord.abc.User,
     concurrency: int = 6,
-    download: bool = False,
 ) -> List[Track]:
     """Resolve multiple URLs concurrently into streamable Tracks."""
     if not urls:
@@ -576,7 +447,7 @@ async def resolve_tracks_concurrently(
     async def _worker(url: str) -> Optional[Track]:
         async with semaphore:
             try:
-                return await resolve_track(url, requested_by, download=download)
+                return await resolve_track(url, requested_by)
             except Exception:
                 return None
 
@@ -592,77 +463,3 @@ def format_duration(seconds: Optional[int]) -> str:
     if h:
         return f"{h}:{m:02d}:{s:02d}"
     return f"{m}:{s:02d}"
-
-
-def get_cache_size() -> Tuple[int, int]:
-    """Get cache size in bytes and number of files."""
-    total_size = 0
-    file_count = 0
-
-    if not CACHE_DIR.exists():
-        return 0, 0
-
-    for file in CACHE_DIR.iterdir():
-        if file.is_file():
-            total_size += file.stat().st_size
-            file_count += 1
-
-    return total_size, file_count
-
-
-async def cleanup_cache(max_age_days: int = 7, max_size_mb: int = 500) -> int:
-    """Clean up old cached files. Returns number of files deleted."""
-    import time
-
-    if not CACHE_DIR.exists():
-        return 0
-
-    deleted = 0
-    current_time = time.time()
-    max_age_seconds = max_age_days * 24 * 60 * 60
-    max_size_bytes = max_size_mb * 1024 * 1024
-
-    # Get all files with their modification times
-    files_with_time = []
-    for file in CACHE_DIR.iterdir():
-        if file.is_file():
-            files_with_time.append((file, file.stat().st_mtime))
-
-    # Sort by modification time (oldest first)
-    files_with_time.sort(key=lambda x: x[1])
-
-    # Delete old files
-    for file, mtime in files_with_time:
-        age = current_time - mtime
-        if age > max_age_seconds:
-            try:
-                file.unlink()
-                deleted += 1
-            except Exception:
-                pass
-
-    # Check total size and delete oldest files if needed
-    total_size, _ = get_cache_size()
-    if total_size > max_size_bytes:
-        # Refresh file list after age-based deletion
-        files_with_time = []
-        for file in CACHE_DIR.iterdir():
-            if file.is_file():
-                files_with_time.append(
-                    (file, file.stat().st_mtime, file.stat().st_size)
-                )
-
-        files_with_time.sort(key=lambda x: x[1])  # Oldest first
-
-        current_size = total_size
-        for file, mtime, size in files_with_time:
-            if current_size <= max_size_bytes:
-                break
-            try:
-                file.unlink()
-                current_size -= size
-                deleted += 1
-            except Exception:
-                pass
-
-    return deleted
