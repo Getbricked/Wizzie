@@ -65,6 +65,15 @@ async def play(interaction: discord.Interaction, query: str):
     state = get_guild_state(interaction.guild)
     await state.connect(channel)
 
+    # Set text channel for now playing messages
+    if interaction.channel:
+        state.set_text_channel(interaction.channel)
+        print(
+            f"DEBUG: Set text channel to {interaction.channel.name} (type: {type(interaction.channel).__name__})"
+        )
+    else:
+        print(f"DEBUG: No interaction.channel available")
+
     # Fast path: playlists
     try:
         is_playlist, entry_urls, playlist_title = await extract_playlist_entry_urls(

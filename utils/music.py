@@ -20,11 +20,13 @@ except Exception as e:  # pragma: no cover
 @dataclass(frozen=True)
 class Track:
     title: str
-    stream_url: str
     webpage_url: str
     duration: Optional[int]
     requested_by_id: int
     video_id: Optional[str] = None
+    stream_url: Optional[str] = (
+        None  # Can be None, will be fetched fresh before playing
+    )
 
 
 YTDLP_OPTIONS_SINGLE = {
@@ -34,6 +36,11 @@ YTDLP_OPTIONS_SINGLE = {
     "noplaylist": True,
     "default_search": "ytsearch",
     "source_address": "0.0.0.0",
+    # Additional options to avoid 403 errors
+    "extractor_args": {"youtube": {"player_client": ["android", "web"]}},
+    "http_headers": {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
+    },
 }
 
 YTDLP_OPTIONS_PLAYLIST = {
@@ -51,7 +58,8 @@ YTDLP_OPTIONS_PLAYLIST_FLAT = {
 FFMPEG_OPTIONS = {
     "before_options": (
         "-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5 "
-        "-probesize 10M -analyzeduration 10M"
+        "-probesize 10M -analyzeduration 10M "
+        '-user_agent "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"'
     ),
     "options": "-vn -bufsize 512k",
 }
@@ -70,6 +78,11 @@ class GuildMusicState:
         self._advance_lock = asyncio.Lock()
         self.autoplay_enabled: bool = False
         self._autoplay_history: List[str] = []  # Track video IDs to avoid repeats
+        self.text_channel: Optional[discord.TextChannel] = (
+            None  # For now playing messages
+        )
+        self._idle_disconnect_task: Optional[asyncio.Task] = None
+        self._idle_timeout: int = 300  # 5 minutes of inactivity
 
     def is_playing(self) -> bool:
         return bool(
@@ -85,6 +98,15 @@ class GuildMusicState:
             and self.voice_client.is_paused()
         )
 
+    def _is_voice_connected(self) -> bool:
+        """Check if voice client is valid and connected."""
+        return bool(
+            self.voice_client
+            and self.voice_client.is_connected()
+            and hasattr(self.voice_client, "ws")
+            and self.voice_client.ws is not None
+        )
+
     async def connect(self, channel: discord.VoiceChannel) -> None:
         if self.voice_client and self.voice_client.is_connected():
             if self.voice_client.channel and self.voice_client.channel.id == channel.id:
@@ -95,8 +117,24 @@ class GuildMusicState:
         self.voice_client = await channel.connect()
 
     async def disconnect(self) -> None:
-        if self.voice_client and self.voice_client.is_connected():
-            await self.voice_client.disconnect(force=True)
+        # Cancel idle disconnect task
+        if self._idle_disconnect_task and not self._idle_disconnect_task.done():
+            self._idle_disconnect_task.cancel()
+            self._idle_disconnect_task = None
+
+        if self.voice_client:
+            try:
+                # Clear voice channel status
+                if self.voice_client.channel:
+                    try:
+                        await self.voice_client.channel.edit(status=None)
+                    except Exception:
+                        pass
+                if self.voice_client.is_connected():
+                    await self.voice_client.disconnect(force=True)
+            except Exception:
+                pass  # Ignore disconnect errors
+
         self.voice_client = None
         self.current = None
         await self.clear_queue()
@@ -112,10 +150,81 @@ class GuildMusicState:
     async def enqueue(self, track: Track) -> None:
         await self.queue.put(track)
 
+    def set_text_channel(self, channel: discord.TextChannel) -> None:
+        """Set the text channel for now playing messages."""
+        self.text_channel = channel
+
+    async def send_now_playing(self, track: Track, is_autoplay: bool = False) -> None:
+        """Send a now playing message to the text channel."""
+        if not self.text_channel:
+            print(f"DEBUG: No text channel set for sending now playing message")
+            return
+
+        try:
+            embed = discord.Embed(
+                title=(
+                    "🎵 Now Playing" if not is_autoplay else "🎵 Now Playing (Autoplay)"
+                ),
+                description=f"**[{track.title}]({track.webpage_url})**",
+                color=(
+                    discord.Color.blue() if not is_autoplay else discord.Color.green()
+                ),
+            )
+
+            if track.duration:
+                embed.add_field(
+                    name="Duration", value=format_duration(track.duration), inline=True
+                )
+
+            requested_by = self.text_channel.guild.get_member(track.requested_by_id)
+            if requested_by:
+                embed.add_field(
+                    name="Requested by", value=requested_by.mention, inline=True
+                )
+
+            print(f"DEBUG: Sending now playing to channel {self.text_channel.name}")
+            await self.text_channel.send(embed=embed)
+        except Exception as e:
+            # Log the error for debugging
+            print(f"Failed to send now playing message: {e}")
+
+    def _cancel_idle_disconnect(self) -> None:
+        """Cancel any pending idle disconnect."""
+        if self._idle_disconnect_task and not self._idle_disconnect_task.done():
+            self._idle_disconnect_task.cancel()
+            self._idle_disconnect_task = None
+
+    async def _idle_disconnect_timer(self) -> None:
+        """Disconnect after idle timeout if not in autoplay mode."""
+        try:
+            await asyncio.sleep(self._idle_timeout)
+            # Only disconnect if not in autoplay mode and nothing is playing
+            if (
+                not self.autoplay_enabled
+                and not self.is_playing()
+                and self.queue.empty()
+            ):
+                await self.disconnect()
+        except asyncio.CancelledError:
+            pass  # Task was cancelled, which is expected
+
+    def _schedule_idle_disconnect(self) -> None:
+        """Schedule an idle disconnect if not in autoplay mode."""
+        self._cancel_idle_disconnect()
+        if not self.autoplay_enabled:
+            self._idle_disconnect_task = asyncio.create_task(
+                self._idle_disconnect_timer()
+            )
+
     async def play_next(self) -> None:
         async with self._advance_lock:
-            if not self.voice_client or not self.voice_client.is_connected():
+            # Cancel any idle disconnect since we're about to play
+            self._cancel_idle_disconnect()
+
+            # Validate voice connection
+            if not self._is_voice_connected():
                 self.current = None
+                await self.disconnect()
                 return
 
             if self.voice_client.is_playing() or self.voice_client.is_paused():
@@ -127,31 +236,91 @@ class GuildMusicState:
                     await self._queue_autoplay_track()
                     if self.queue.empty():
                         self.current = None
+                        # Schedule idle disconnect for non-autoplay
+                        self._schedule_idle_disconnect()
                         return
                 else:
                     self.current = None
+                    # Schedule idle disconnect when queue is empty
+                    self._schedule_idle_disconnect()
                     return
 
             track = await self.queue.get()
             self.current = track
+            is_autoplay = (
+                track.video_id in self._autoplay_history if track.video_id else False
+            )
 
-            # Stream the track
-            source = discord.FFmpegPCMAudio(track.stream_url, **FFMPEG_OPTIONS)
-            audio = discord.PCMVolumeTransformer(source, volume=self.volume)
+            # Get fresh stream URL (YouTube URLs expire)
+            try:
+                stream_url = await get_fresh_stream_url(track)
+            except Exception as e:
+                # If we can't get stream URL, skip this track
+                if self.current is not None:
+                    self.queue.task_done()
+                await self.play_next()
+                return
 
-            def _after(error: Optional[BaseException]) -> None:
-                # Called from a different thread by discord.py
-                asyncio.run_coroutine_threadsafe(self._on_track_end(error), self._loop)
+            # Validate connection again before playing
+            if not self._is_voice_connected():
+                if self.current is not None:
+                    self.queue.task_done()
+                self.current = None
+                await self.disconnect()
+                return
 
-            self.voice_client.play(audio, after=_after)
+            try:
+                # Stream the track
+                source = discord.FFmpegPCMAudio(stream_url, **FFMPEG_OPTIONS)
+                audio = discord.PCMVolumeTransformer(source, volume=self.volume)
+
+                def _after(error: Optional[BaseException]) -> None:
+                    # Called from a different thread by discord.py
+                    asyncio.run_coroutine_threadsafe(
+                        self._on_track_end(error), self._loop
+                    )
+
+                self.voice_client.play(audio, after=_after)
+
+                # Set voice channel status to song name
+                if self.voice_client.channel:
+                    try:
+                        # Truncate to 500 chars (Discord limit)
+                        status_text = (
+                            track.title[:500] if len(track.title) > 500 else track.title
+                        )
+                        await self.voice_client.channel.edit(status=status_text)
+                    except Exception:
+                        pass  # Ignore if we can't set status
+
+                # Send now playing message
+                await self.send_now_playing(track, is_autoplay=is_autoplay)
+            except Exception as e:
+                # Handle playback errors (e.g., connection issues)
+                if self.current is not None:
+                    self.queue.task_done()
+                # Try to continue with next track
+                await self.play_next()
 
     async def _on_track_end(self, error: Optional[BaseException]) -> None:
         if error:
-            # Swallow playback errors; next play will attempt to continue
-            pass
+            # Log connection errors but continue
+            if isinstance(error, (discord.errors.ConnectionClosed, ConnectionError)):
+                # Connection was lost, try to recover
+                if not self._is_voice_connected():
+                    self.current = None
+                    await self.disconnect()
+                    return
+
         if self.current is not None:
             self.queue.task_done()
-        await self.play_next()
+
+        try:
+            await self.play_next()
+        except Exception:
+            # If play_next fails completely, clean up
+            self.current = None
+            self._schedule_idle_disconnect()
 
     def set_autoplay(self, enabled: bool) -> bool:
         """Enable or disable autoplay mode. Returns the new state."""
@@ -213,6 +382,33 @@ def _require_yt_dlp() -> None:
             "Install it with `pip install yt-dlp` and restart the bot. "
             f"Import error: {_yt_dlp_import_error!r}"
         )
+
+
+async def get_fresh_stream_url(track: Track) -> str:
+    """Get a fresh stream URL for a track. YouTube URLs expire, so we fetch them just before playing."""
+    _require_yt_dlp()
+
+    # Use video_id if available for faster lookup, otherwise use webpage_url
+    url = (
+        f"https://www.youtube.com/watch?v={track.video_id}"
+        if track.video_id
+        else track.webpage_url
+    )
+
+    def _extract() -> dict:
+        with yt_dlp.YoutubeDL(YTDLP_OPTIONS_SINGLE) as ydl:  # type: ignore[attr-defined]
+            return ydl.extract_info(url, download=False)
+
+    info = await asyncio.to_thread(_extract)
+
+    if not isinstance(info, dict):
+        raise ValueError("Failed to extract media info")
+
+    stream_url = info.get("url")
+    if not stream_url:
+        raise ValueError("Could not get stream URL from extractor")
+
+    return str(stream_url)
 
 
 async def get_radio_track(
@@ -297,22 +493,21 @@ async def resolve_track(query_or_url: str, requested_by: discord.abc.User) -> Tr
     if not isinstance(info, dict):
         raise ValueError("Failed to extract media info")
 
-    stream_url = info.get("url")
     title = info.get("title") or "Unknown title"
     webpage_url = info.get("webpage_url") or info.get("original_url") or query_or_url
     duration = info.get("duration")
     video_id = info.get("id")
 
-    if not stream_url:
-        raise ValueError("Could not get stream URL from extractor")
+    # We don't store stream_url anymore - it will be fetched fresh before playing
+    # This avoids 403 errors from expired URLs
 
     return Track(
         title=str(title),
-        stream_url=str(stream_url),
         webpage_url=str(webpage_url),
         duration=int(duration) if isinstance(duration, (int, float)) else None,
         requested_by_id=requested_by.id,
         video_id=str(video_id) if video_id else None,
+        stream_url=None,  # Will be fetched fresh before playing
     )
 
 
