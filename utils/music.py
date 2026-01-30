@@ -108,10 +108,21 @@ class GuildMusicState:
         )
 
     async def connect(self, channel: discord.VoiceChannel) -> None:
+        # Check if we already have a valid voice client
         if self.voice_client and self.voice_client.is_connected():
             if self.voice_client.channel and self.voice_client.channel.id == channel.id:
                 return
             await self.voice_client.move_to(channel)
+            return
+
+        # Check if bot is already connected to a voice channel in this guild
+        # This handles cases where voice_client reference is lost but bot is still connected
+        guild = channel.guild
+        if guild.voice_client and guild.voice_client.is_connected():
+            # Bot is already in a voice channel, reuse the voice client
+            self.voice_client = guild.voice_client
+            if self.voice_client.channel and self.voice_client.channel.id != channel.id:
+                await self.voice_client.move_to(channel)
             return
 
         self.voice_client = await channel.connect()
